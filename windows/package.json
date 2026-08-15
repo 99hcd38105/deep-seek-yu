@@ -1,6 +1,6 @@
 {
   "name": "deepseek-harness-desktop",
-  "version": "1.0.8",
+  "version": "1.0.9-beta.1",
   "private": true,
   "description": "DeepSeek Harness desktop client",
   "author": "Local build",
@@ -50,6 +50,10 @@
     "files": [
       "main.js",
       "mobile-gateway.mjs",
+      "pet-manager.js",
+      "pet-preload.js",
+      "pet-window.html",
+      "pet-settings.html",
       "assets/**/*",
       "package.json"
     ],

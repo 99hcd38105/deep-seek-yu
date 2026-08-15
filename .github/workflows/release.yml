@@ -79,7 +79,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create $env:GITHUB_REF_NAME release\* `
-            --verify-tag `
-            --generate-notes `
-            --title "DeepSeek Harness $env:GITHUB_REF_NAME"
+          $releaseFiles = Get-ChildItem -Path release -File | ForEach-Object { $_.FullName }
+          $arguments = @($env:GITHUB_REF_NAME) + @($releaseFiles) + @(
+            '--verify-tag',
+            '--generate-notes',
+            '--title', "DeepSeek Harness $env:GITHUB_REF_NAME"
+          )
+          if ($env:GITHUB_REF_NAME -match '-') {
+            $arguments += '--prerelease'
+          }
+          gh release create @arguments

@@ -1,0 +1,12 @@
+{
+  "id": "default-maid",
+  "name": "蓝鲸女仆",
+  "author": "DeepSeek Harness Community",
+  "actions": {
+    "idle": "idle.png",
+    "thinking": "thinking.png",
+    "executing": "executing.png",
+    "success": "success.png",
+    "error": "error.png"
+  }
+}

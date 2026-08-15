@@ -6,6 +6,7 @@ const http = require('node:http');
 const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
+const { createDesktopPet } = require('./pet-manager');
 
 const MOBILE_SETTINGS_FILE = 'mobile-access.json';
 const MOBILE_SETTINGS_VERSION = 2;
@@ -13,6 +14,7 @@ const MOBILE_PORT_MIN = 20000;
 const MOBILE_PORT_MAX = 49152;
 
 let mainWindow;
+let desktopPet = null;
 let gatewayProcess = null;
 let harnessProcess = null;
 let gatewayStarting = false;
@@ -498,6 +500,38 @@ function installMenu() {
         { role: 'zoomOut', label: '缩小' },
       ],
     },
+    {
+      label: '桌宠',
+      submenu: [
+        {
+          label: desktopPet?.isVisible() ? '隐藏桌宠' : '显示桌宠',
+          enabled: Boolean(desktopPet),
+          click: () => desktopPet?.isVisible() ? desktopPet.hide() : desktopPet?.show(),
+        },
+        {
+          label: '桌宠设置',
+          enabled: Boolean(desktopPet),
+          click: () => desktopPet?.openSettings(),
+        },
+        { type: 'separator' },
+        {
+          label: '打开自定义桌宠目录',
+          enabled: Boolean(desktopPet),
+          click: async () => {
+            try {
+              await desktopPet?.openDirectory();
+            } catch (error) {
+              await dialog.showMessageBox(mainWindow, {
+                type: 'error',
+                title: '无法打开桌宠目录',
+                message: error.message,
+                buttons: ['确定'],
+              });
+            }
+          },
+        },
+      ],
+    },
   ]));
 }
 
@@ -533,6 +567,10 @@ function createWindow() {
   });
   mainWindow.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
   mainWindow.loadURL(appUrl);
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+    if (!quitting) app.quit();
+  });
 }
 
 const gotLock = app.requestSingleInstanceLock();
@@ -557,8 +595,15 @@ if (!gotLock) {
       }
       mobileSettings();
       await ensureHarness();
-      installMenu();
       createWindow();
+      desktopPet = createDesktopPet({
+        app,
+        mainWindow,
+        onMenuChange: () => {
+          if (!quitting) installMenu();
+        },
+      }).start();
+      installMenu();
       initializing = false;
     } catch (error) {
       await dialog.showMessageBox({
@@ -577,6 +622,8 @@ app.on('window-all-closed', () => {
 });
 app.on('before-quit', () => {
   quitting = true;
+  desktopPet?.destroy();
+  desktopPet = null;
   stopGatewayNow();
   stopHarnessNow();
 });

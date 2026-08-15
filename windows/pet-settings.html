@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' file: data:; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+  <title>桌宠设置</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f8fafc;color:#0f172a;font:14px/1.5 Inter,"Segoe UI","Microsoft YaHei",sans-serif}main{max-width:640px;margin:auto;padding:24px}h1{margin:0;font-size:24px}.beta{display:inline-block;margin-left:8px;padding:2px 8px;border-radius:999px;background:#dbeafe;color:#1d4ed8;font-size:11px;vertical-align:middle}.lead{margin:6px 0 20px;color:#64748b}.card{margin:14px 0;padding:18px;border:1px solid #e2e8f0;border-radius:16px;background:white;box-shadow:0 5px 18px rgba(15,23,42,.05)}h2{margin:0 0 13px;font-size:16px}.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 18px;align-items:center;padding:10px 0}.row+.row{border-top:1px solid #f1f5f9}.desc{color:#64748b;font-size:12px}.switch{width:20px;height:20px}.field{width:230px;max-width:100%;height:38px;border:1px solid #cbd5e1;border-radius:9px;padding:0 10px;background:#fff}.range{width:180px}.preview{display:flex;align-items:center;gap:15px}.preview img{width:86px;height:86px;object-fit:contain;border-radius:15px;background:linear-gradient(135deg,#eff6ff,#f8fafc)}.preview select{width:220px}.buttons{display:flex;gap:8px;flex-wrap:wrap;margin-top:11px}button{height:38px;border:1px solid #cbd5e1;border-radius:10px;padding:0 14px;background:white;cursor:pointer;font-weight:650}button:hover{background:#f8fafc}.primary{border-color:#1d4ed8;background:#1d4ed8;color:white}.primary:hover{background:#1e40af}.notice{padding:11px 12px;border-radius:11px;background:#fff7ed;color:#9a3412;font-size:12px}.footer{display:flex;justify-content:flex-end;gap:9px;margin-top:18px}.saved{color:#15803d;font-size:12px;align-self:center;margin-right:auto}
+  </style>
+</head>
+<body><main>
+  <h1>桌宠设置 <span class="beta">v1.0.9 测试版</span></h1><p class="lead">动作会随当前聊天的思考、命令执行、完成和错误状态自动切换。</p>
+  <section class="card"><h2>显示与角色</h2>
+    <div class="row"><div><strong>启动客户端时显示桌宠</strong><div class="desc">关闭后可以从“桌宠”菜单再次显示</div></div><input id="enabled" class="switch" type="checkbox"></div>
+    <div class="row"><div><strong>始终置顶</strong><div class="desc">让桌宠保持在其他普通窗口上方</div></div><input id="alwaysOnTop" class="switch" type="checkbox"></div>
+    <div class="row"><div><strong>显示状态文字</strong><div class="desc">显示“正在思考”“正在执行命令”等提示</div></div><input id="showStatus" class="switch" type="checkbox"></div>
+    <div class="row"><div><strong>桌宠大小</strong><div class="desc"><span id="sizeValue"></span> 像素</div></div><input id="size" class="range" type="range" min="220" max="420" step="10"></div>
+    <div class="row"><div><strong>透明度</strong><div class="desc"><span id="opacityValue"></span>%</div></div><input id="opacity" class="range" type="range" min="55" max="100" step="5"></div>
+    <div class="preview"><img id="preview" alt="桌宠预览"><div><select id="character" class="field"></select><div class="buttons"><button id="openDirectory">打开自定义桌宠目录</button><button id="refresh">刷新角色列表</button></div></div></div>
+  </section>
+  <section class="card"><h2>豆包图片识别</h2>
+    <div class="notice">火山方舟可能提供体验免费额度，但不是永久免费无限调用；超出额度后是否计费以你的控制台为准。密钥只保存在这台电脑，不会写入 Git、安装包或手机端。</div>
+    <div class="row"><div><strong>火山方舟 API Key</strong><div id="keyState" class="desc"></div></div><input id="apiKey" class="field" type="password" autocomplete="new-password" placeholder="留空保持现有密钥"></div>
+    <div class="row"><div><strong>视觉模型或接入点 ID</strong><div class="desc">可填写模型 ID 或 ep- 开头的推理接入点</div></div><input id="visionModel" class="field" type="text"></div>
+    <div class="row"><div><strong>删除已保存的豆包密钥</strong></div><input id="clearApiKey" class="switch" type="checkbox"></div>
+  </section>
+  <div class="footer"><span id="saved" class="saved"></span><button id="cancel">关闭</button><button id="save" class="primary">保存设置</button></div>
+  <script>
+    const ids=['enabled','alwaysOnTop','showStatus','size','opacity','character','apiKey','visionModel','clearApiKey'];const el=Object.fromEntries(ids.map(id=>[id,document.getElementById(id)]));const errorText=error=>String(error?.message||error||'操作失败').replace(/^Error invoking remote method '[^']+': Error:\s*/,'');let state;
+    function updateRanges(){document.getElementById('sizeValue').textContent=el.size.value;document.getElementById('opacityValue').textContent=el.opacity.value}
+    function renderCharacters(characters,selected){el.character.innerHTML='';for(const pet of characters){const option=document.createElement('option');option.value=pet.id;option.textContent=pet.author?`${pet.name} · ${pet.author}`:pet.name;option.dataset.preview=pet.actions.idle;el.character.appendChild(option)}el.character.value=selected;if(!el.character.value&&characters[0])el.character.value=characters[0].id;updatePreview()}
+    function updatePreview(){const option=el.character.selectedOptions[0];document.getElementById('preview').src=option?.dataset.preview||''}
+    async function load(){state=await window.desktopPet.getSettings();el.enabled.checked=state.settings.enabled;el.alwaysOnTop.checked=state.settings.alwaysOnTop;el.showStatus.checked=state.settings.showStatus;el.size.value=state.settings.size;el.opacity.value=Math.round(state.settings.opacity*100);el.visionModel.value=state.settings.visionModel;document.getElementById('keyState').textContent=state.hasVisionApiKey?'已安全保存；留空不会修改':'尚未配置';renderCharacters(state.characters,state.settings.characterId);updateRanges()}
+    el.size.addEventListener('input',updateRanges);el.opacity.addEventListener('input',updateRanges);el.character.addEventListener('change',updatePreview);document.getElementById('openDirectory').addEventListener('click',()=>window.desktopPet.openPetDirectory());document.getElementById('refresh').addEventListener('click',async()=>{const result=await window.desktopPet.refreshCharacters();renderCharacters(result.characters,el.character.value)});document.getElementById('cancel').addEventListener('click',()=>window.close());document.getElementById('save').addEventListener('click',async()=>{const button=document.getElementById('save');button.disabled=true;try{await window.desktopPet.saveSettings({enabled:el.enabled.checked,alwaysOnTop:el.alwaysOnTop.checked,showStatus:el.showStatus.checked,size:Number(el.size.value),opacity:Number(el.opacity.value)/100,characterId:el.character.value,visionModel:el.visionModel.value,visionApiKey:el.apiKey.value,clearVisionApiKey:el.clearApiKey.checked});document.getElementById('saved').textContent='已保存';el.apiKey.value='';el.clearApiKey.checked=false;await load()}catch(error){document.getElementById('saved').textContent=errorText(error);document.getElementById('saved').style.color='#b91c1c'}finally{button.disabled=false}});load();
+  </script>
+</main></body></html>

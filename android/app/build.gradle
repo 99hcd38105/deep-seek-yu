@@ -11,8 +11,8 @@ android {
         applicationId 'ai.deepseek.harness.client'
         minSdk 26
         targetSdk 36
-        versionCode 8
-        versionName '1.0.8'
+        versionCode 9
+        versionName '1.0.9-beta.1'
     }
 
     buildTypes {
