@@ -8,11 +8,13 @@ const os = require('node:os');
 const path = require('node:path');
 
 const MOBILE_SETTINGS_FILE = 'mobile-access.json';
+const MOBILE_SETTINGS_VERSION = 2;
 const MOBILE_PORT_MIN = 20000;
 const MOBILE_PORT_MAX = 49152;
 
 let mainWindow;
 let gatewayProcess = null;
+let harnessProcess = null;
 let gatewayStarting = false;
 let initializing = true;
 let mobileSettingsCache = null;
@@ -72,6 +74,7 @@ function newMobileSettings() {
     port = crypto.randomInt(MOBILE_PORT_MIN, MOBILE_PORT_MAX);
   } while (port === harnessPort);
   return {
+    version: MOBILE_SETTINGS_VERSION,
     token: crypto.randomBytes(32).toString('base64url'),
     port,
     harnessPort,
@@ -80,6 +83,7 @@ function newMobileSettings() {
 
 function validMobileSettings(value) {
   return value
+    && value.version === MOBILE_SETTINGS_VERSION
     && typeof value.token === 'string'
     && /^[A-Za-z0-9_-]{32,}$/.test(value.token)
     && Number.isInteger(value.port)
@@ -242,6 +246,10 @@ function findDshEntry() {
   ]);
 }
 
+function directoryPickerPatch() {
+  return path.join(app.getAppPath(), 'assets', 'directory-picker-browse.patch.yml');
+}
+
 function spawnHidden(command, args, { detached = true, extraEnv = {} } = {}) {
   const environment = { ...process.env, ...extraEnv };
   if (app.isPackaged) environment.ELECTRON_RUN_AS_NODE = '1';
@@ -272,11 +280,31 @@ async function ensureHarness() {
     if (!dshEntry) {
       throw new Error('没有找到 DeepSeek Harness。请先运行：npm install --global @deepseek-ai/dsh');
     }
-    const dshArguments = [dshEntry, 'web', '--host', '127.0.0.1', '--port', String(harnessPort)];
+    const dshArguments = [
+      dshEntry,
+      'web',
+      '--patch', directoryPickerPatch(),
+      '--host', '127.0.0.1',
+      '--port', String(harnessPort),
+    ];
     if (app.isPackaged) dshArguments.unshift('--expose-internals');
-    spawnHidden(node, dshArguments, { extraEnv: { DSH_HOME: dshHome() } });
+    const child = spawnHidden(node, dshArguments, {
+      detached: false,
+      extraEnv: { DSH_HOME: dshHome() },
+    });
+    harnessProcess = child;
+    child.once('error', () => {});
+    child.once('exit', () => {
+      if (harnessProcess === child) harnessProcess = null;
+    });
   }
   await waitForHttp(localUrl());
+}
+
+function stopHarnessNow() {
+  const child = harnessProcess;
+  harnessProcess = null;
+  if (child && child.exitCode === null && !child.killed) child.kill();
 }
 
 function gatewayIsRunning() {
@@ -550,5 +578,9 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   quitting = true;
   stopGatewayNow();
+  stopHarnessNow();
 });
-process.on('exit', stopGatewayNow);
+process.on('exit', () => {
+  stopGatewayNow();
+  stopHarnessNow();
+});
