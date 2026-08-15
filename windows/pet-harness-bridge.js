@@ -180,9 +180,15 @@
     }
     const question = cleanText(editorText(editors()[0]), 2000);
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       const encoded = String(reader.result || '').split(',')[1] || '';
-      actions.push({ type: 'image-data', dataUrl: `data:${mime};base64,${encoded}`, name: file.name, question });
+      const action = { type: 'image-data', dataUrl: `data:${mime};base64,${encoded}`, name: file.name, question };
+      if (typeof window.__dshMobileVisionUpload === 'function') {
+        try { await window.__dshMobileVisionUpload(action); }
+        catch (error) { actions.push({ type: 'bridge-error', message: String(error?.message || error || '识图失败') }); }
+      } else {
+        actions.push(action);
+      }
     };
     reader.onerror = () => actions.push({ type: 'bridge-error', message: '读取图片失败，请重新选择。' });
     reader.readAsDataURL(file);

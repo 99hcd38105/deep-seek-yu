@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, clipboard, dialog, shell } = require('electron');
+const { app, BrowserWindow, Menu, Tray, clipboard, dialog, shell } = require('electron');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -21,6 +21,7 @@ let gatewayStarting = false;
 let initializing = true;
 let mobileSettingsCache = null;
 let quitting = false;
+let tray = null;
 
 app.setAppUserModelId('ai.deepseek.harness.desktop');
 
@@ -339,6 +340,7 @@ async function startGateway() {
   const allowedPrefix = `${lanAddress.split('.').slice(0, 3).join('.')}.`;
   const gateway = path.join(app.getAppPath(), 'mobile-gateway.mjs');
   const apk = path.join(app.getAppPath(), 'assets', 'DeepSeek-Harness-Android.apk');
+  const proxyRule = await mainWindow.webContents.session.resolveProxy('https://huggingface.co/');
   const child = spawnHidden(node, [
     gateway,
     '--token', settings.token,
@@ -346,6 +348,8 @@ async function startGateway() {
     '--port', String(settings.port),
     '--upstream-port', String(settings.harnessPort),
     '--apk', apk,
+    '--model-cache', path.join(app.getPath('userData'), 'models'),
+    '--proxy-rule', proxyRule || 'DIRECT',
   ], { detached: false });
   gatewayProcess = child;
   child.once('error', () => {});
@@ -535,6 +539,35 @@ function installMenu() {
   ]));
 }
 
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+function updateTrayMenu() {
+  if (!tray || tray.isDestroyed()) return;
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: '打开 DeepSeek Harness', click: showMainWindow },
+    {
+      label: desktopPet?.isVisible() ? '隐藏桌宠' : '显示桌宠',
+      enabled: Boolean(desktopPet),
+      click: () => desktopPet?.isVisible() ? desktopPet.hide() : desktopPet?.show(),
+    },
+    { type: 'separator' },
+    { label: '退出', click: () => app.quit() },
+  ]));
+}
+
+function createTray() {
+  if (tray && !tray.isDestroyed()) return;
+  tray = new Tray(path.join(app.getAppPath(), 'assets', 'DeepSeek-Harness-icon.ico'));
+  tray.setToolTip('DeepSeek Harness');
+  tray.on('click', showMainWindow);
+  updateTrayMenu();
+}
+
 function createWindow() {
   const appUrl = localUrl();
   mainWindow = new BrowserWindow({
@@ -567,6 +600,13 @@ function createWindow() {
   });
   mainWindow.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
   mainWindow.loadURL(appUrl);
+  mainWindow.on('close', (event) => {
+    if (quitting || !desktopPet?.shouldRunInBackground()) return;
+    event.preventDefault();
+    mainWindow.hide();
+    desktopPet.show();
+    updateTrayMenu();
+  });
   mainWindow.on('closed', () => {
     mainWindow = null;
     if (!quitting) app.quit();
@@ -579,8 +619,7 @@ if (!gotLock) {
 } else {
   app.on('second-instance', () => {
     if (!mainWindow) return;
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
+    showMainWindow();
   });
 
   app.whenReady().then(async () => {
@@ -600,9 +639,13 @@ if (!gotLock) {
         app,
         mainWindow,
         onMenuChange: () => {
-          if (!quitting) installMenu();
+          if (!quitting) {
+            installMenu();
+            updateTrayMenu();
+          }
         },
       }).start();
+      createTray();
       installMenu();
       initializing = false;
     } catch (error) {
@@ -624,6 +667,8 @@ app.on('before-quit', () => {
   quitting = true;
   desktopPet?.destroy();
   desktopPet = null;
+  if (tray && !tray.isDestroyed()) tray.destroy();
+  tray = null;
   stopGatewayNow();
   stopHarnessNow();
 });

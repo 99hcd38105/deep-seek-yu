@@ -1,6 +1,6 @@
 {
   "name": "deepseek-harness-desktop",
-  "version": "1.0.9",
+  "version": "1.1.0-beta.1",
   "private": true,
   "description": "DeepSeek Harness desktop client",
   "author": "Local build",
@@ -30,13 +30,19 @@
     "@deepseek-ai/dsh-subagent-in-process-driver": "0.1.0-rc.6",
     "@deepseek-ai/dsh-subprocess": "0.1.0-rc.6",
     "@deepseek-ai/dsh-timeout": "0.1.0-rc.6",
-    "@deepseek-ai/dsh-workflow": "0.1.0-rc.6"
+    "@deepseek-ai/dsh-workflow": "0.1.0-rc.6",
+    "@huggingface/transformers": "^4.2.0",
+    "undici": "^7.29.0"
   },
   "devDependencies": {
     "@electron/packager": "20.3.0",
     "electron": "43.4.0",
     "electron-builder": "26.15.3",
     "playwright": "^1.62.1"
+  },
+  "overrides": {
+    "adm-zip": "0.6.0",
+    "sharp": "0.35.3"
   },
   "build": {
     "appId": "ai.deepseek.harness.desktop",
@@ -50,11 +56,13 @@
     "files": [
       "main.js",
       "mobile-gateway.mjs",
+      "local-vision.js",
       "pet-manager.js",
       "pet-harness-bridge.js",
       "pet-preload.js",
       "pet-window.html",
       "pet-settings.html",
+      "THIRD_PARTY_NOTICES.md",
       "assets/**/*",
       "package.json"
     ],

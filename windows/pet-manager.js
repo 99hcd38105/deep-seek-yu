@@ -2,12 +2,11 @@ const { BrowserWindow, dialog, ipcMain, screen, shell } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
+const { createLocalVision } = require('./local-vision');
 
 const SETTINGS_FILE = 'desktop-pet.json';
-const VISION_CREDENTIALS_FILE = 'doubao-vision-credentials.json';
-const SETTINGS_VERSION = 1;
-const ARK_ENDPOINT = 'https://ark.cn-beijing.volces.com/api/v3/chat/completions';
-const DEFAULT_VISION_MODEL = 'doubao-seed-2-0-lite-260215';
+const LEGACY_VISION_CREDENTIALS_FILE = 'doubao-vision-credentials.json';
+const SETTINGS_VERSION = 2;
 const ACTION_NAMES = ['idle', 'thinking', 'executing', 'success', 'error'];
 const IMAGE_MIME = new Map([
   ['.png', 'image/png'],
@@ -61,20 +60,14 @@ function normalizeSettings(value = {}) {
     alwaysOnTop: value.alwaysOnTop !== false,
     showStatus: value.showStatus !== false,
     showChatPanel: value.showChatPanel !== false,
+    backgroundOnClose: value.backgroundOnClose !== false,
     size: Math.round(clamp(value.size ?? 300, 220, 420) / 10) * 10,
     opacity: clamp(value.opacity ?? 1, 0.55, 1),
     characterId: safeIdentifier(value.characterId) || 'default-maid',
-    visionModel: String(value.visionModel || DEFAULT_VISION_MODEL).trim().slice(0, 160) || DEFAULT_VISION_MODEL,
     position: value.position && Number.isInteger(value.position.x) && Number.isInteger(value.position.y)
       ? { x: value.position.x, y: value.position.y }
       : null,
   };
-}
-
-function contentToText(content) {
-  if (typeof content === 'string') return content.trim();
-  if (!Array.isArray(content)) return '';
-  return content.map((item) => typeof item === 'string' ? item : (item?.text || '')).join('\n').trim();
 }
 
 function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
@@ -96,9 +89,26 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
   const handlers = [];
 
   const settingsPath = () => path.join(app.getPath('userData'), SETTINGS_FILE);
-  const visionCredentialsPath = () => path.join(app.getPath('userData'), VISION_CREDENTIALS_FILE);
+  const legacyVisionCredentialsPath = () => path.join(app.getPath('userData'), LEGACY_VISION_CREDENTIALS_FILE);
   const userPetDirectory = () => path.join(app.getPath('userData'), 'pets');
   const builtinPetDirectory = () => path.join(app.getAppPath(), 'assets', 'pets', 'default-maid');
+  const localVision = createLocalVision({
+    cacheDir: path.join(app.getPath('userData'), 'models'),
+    resolveProxy: (url) => mainWindow.webContents.session.resolveProxy(url),
+    onState: (vision) => {
+      if (vision.status === 'downloading') setStatus('thinking', `首次准备识图模型… ${vision.progress}%`);
+      else if (vision.status === 'loading') setStatus('thinking', '正在加载本地识图模型…');
+      else if (vision.status === 'analyzing') setStatus('thinking', '正在本地识别图片…');
+      else if (vision.status === 'ready' && !imageProcessing) {
+        setStatus('success', '本地识图已就绪');
+        scheduleIdle();
+      } else if (vision.status === 'error') {
+        setStatus('error', '本地识图准备失败');
+        scheduleIdle(4500);
+      }
+      if (settingsWindow && !settingsWindow.isDestroyed()) settingsWindow.webContents.send('desktop-pet:vision-state', vision);
+    },
+  });
 
   function loadSettings() {
     if (!settings) settings = normalizeSettings(readJson(settingsPath()) || {});
@@ -108,23 +118,6 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
   function saveSettings() {
     settings = normalizeSettings(settings);
     writeJsonAtomic(settingsPath(), settings);
-  }
-
-  function visionApiKey() {
-    const value = readJson(visionCredentialsPath());
-    return typeof value?.apiKey === 'string' ? value.apiKey.trim() : '';
-  }
-
-  function saveVisionApiKey(value) {
-    const key = String(value || '').trim();
-    if (!key || key.length < 20 || key.length > 512 || !/^[\x21-\x7E]+$/.test(key)) {
-      throw new Error('请输入有效的火山方舟 API Key。');
-    }
-    writeJsonAtomic(visionCredentialsPath(), { apiKey: key });
-  }
-
-  function removeVisionApiKey() {
-    try { fs.rmSync(visionCredentialsPath(), { force: true }); } catch {}
   }
 
   function parsePet(directory, builtin = false) {
@@ -178,7 +171,7 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
       statusText,
       showStatus: loadSettings().showStatus,
       showChatPanel: loadSettings().showChatPanel,
-      visionReady: Boolean(visionApiKey()),
+      visionReady: localVision.getState().cached,
       messages,
       characterId: selected?.id || '',
       actions: selected?.actions || {},
@@ -188,9 +181,8 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
   function settingsPayload() {
     return {
       settings: { ...loadSettings() },
-      hasVisionApiKey: Boolean(visionApiKey()),
+      vision: localVision.getState(),
       characters: characters(),
-      arkEndpoint: ARK_ENDPOINT,
     };
   }
 
@@ -355,54 +347,15 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
   function validateImageDataUrl(value) {
     const match = /^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/=]+)$/.exec(String(value || ''));
     if (!match) throw new Error('图片格式无效，仅支持 PNG、JPG、WebP 和 GIF。');
-    const bytes = Math.floor(match[2].length * 3 / 4) - (match[2].endsWith('==') ? 2 : match[2].endsWith('=') ? 1 : 0);
-    if (bytes > 10 * 1024 * 1024) throw new Error('图片不能超过 10 MB。');
-    return String(value);
+    const buffer = Buffer.from(match[2], 'base64');
+    if (buffer.length > 10 * 1024 * 1024) throw new Error('图片不能超过 10 MB。');
+    return { buffer, mimeType: match[1] };
   }
 
   async function analyzeImageData(dataUrl, question) {
-    const apiKey = visionApiKey();
-    if (!apiKey) {
-      openSettings();
-      throw new Error('请先在桌宠设置中填写火山方舟 API Key。');
-    }
-    const validatedDataUrl = validateImageDataUrl(dataUrl);
+    const image = validateImageDataUrl(dataUrl);
     const userQuestion = String(question || '').trim().slice(0, 2000);
-    const prompt = userQuestion
-      ? `请用中文准确、详细地识别这张图片，并重点回答用户的问题：${userQuestion}。如果是报错截图，请提取关键报错；如果是界面图，请描述布局、文字和可见状态。不要猜测看不清的内容。`
-      : '请用中文准确、详细地识别这张图片。如果是报错截图，请提取关键报错；如果是界面图，请描述布局、文字和可见状态。不要猜测看不清的内容。';
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 90000);
-    let response;
-    try {
-      response = await fetch(ARK_ENDPOINT, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
-        signal: controller.signal,
-        body: JSON.stringify({
-          model: loadSettings().visionModel,
-          messages: [{ role: 'user', content: [
-            { type: 'text', text: prompt },
-            { type: 'image_url', image_url: { url: validatedDataUrl } },
-          ] }],
-          temperature: 0.1,
-          max_tokens: 1400,
-        }),
-      });
-    } catch (error) {
-      if (error?.name === 'AbortError') throw new Error('豆包识图超时，请检查网络后重试。');
-      throw new Error(`豆包识图连接失败：${error.message}`);
-    } finally {
-      clearTimeout(timeout);
-    }
-    let body = null;
-    try { body = await response.json(); } catch {}
-    if (!response.ok) {
-      const detail = String(body?.error?.message || body?.message || `HTTP ${response.status}`).slice(0, 300);
-      throw new Error(`豆包识图失败：${detail}`);
-    }
-    const description = contentToText(body?.choices?.[0]?.message?.content);
-    if (!description) throw new Error('豆包没有返回可用的图片描述。');
+    const description = await localVision.analyze(image.buffer, image.mimeType);
     return { description, userQuestion };
   }
 
@@ -414,7 +367,7 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
     try {
       const result = await analyzeImageData(dataUrl, question);
       const combined = [
-        '用户附加了一张图片。以下是视觉模型返回的文字描述，请只把它作为图片上下文继续完成用户请求：',
+        '用户附加了一张图片。图片已由电脑上的本地视觉模型读取，原图没有上传给你。以下是视觉模型返回的文字描述（可能是英文），请把它作为图片上下文，用中文继续完成用户请求：',
         '',
         result.description,
         '',
@@ -425,7 +378,6 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
     } catch (error) {
       setStatus('error', error.message);
       scheduleIdle(4500);
-      if (!visionApiKey()) openSettings();
       throw error;
     } finally {
       imageProcessing = false;
@@ -433,12 +385,6 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
   }
 
   async function chooseImage(question) {
-    if (!visionApiKey()) {
-      setStatus('error', '请先配置图片识别');
-      scheduleIdle(4500);
-      openSettings();
-      throw new Error('请先在桌宠设置中填写火山方舟 API Key。');
-    }
     const selection = await dialog.showOpenDialog(mainWindow, {
       title: '选择要识别的图片',
       properties: ['openFile'],
@@ -535,14 +481,22 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
     handle('desktop-pet:get-settings', () => settingsPayload());
     handle('desktop-pet:save-settings', (input = {}) => {
       const next = normalizeSettings({ ...loadSettings(), ...input, position: loadSettings().position });
-      if (String(input.visionApiKey || '').trim()) saveVisionApiKey(input.visionApiKey);
-      if (input.clearVisionApiKey === true) removeVisionApiKey();
       if (!characters().some((item) => item.id === next.characterId)) next.characterId = 'default-maid';
       settings = next;
       saveSettings();
       if (settings.enabled) createPetWindow();
       applyWindowSettings();
       return settingsPayload();
+    });
+    handle('desktop-pet:prepare-vision', async () => {
+      await localVision.prepare();
+      return localVision.getState();
+    });
+    handle('desktop-pet:open-model-directory', async () => {
+      fs.mkdirSync(localVision.modelDirectory(), { recursive: true });
+      const result = await shell.openPath(localVision.modelDirectory());
+      if (result) throw new Error(result);
+      return { ok: true };
     });
     handle('desktop-pet:open-directory', async () => {
       fs.mkdirSync(userPetDirectory(), { recursive: true });
@@ -555,6 +509,7 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
 
   function start() {
     loadSettings();
+    try { fs.rmSync(legacyVisionCredentialsPath(), { force: true }); } catch {}
     fs.mkdirSync(userPetDirectory(), { recursive: true });
     installIpc();
     mainWindow.webContents.on('did-finish-load', installHarnessBridge);
@@ -579,6 +534,7 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
     show: showPet,
     hide: hidePet,
     openSettings,
+    shouldRunInBackground: () => loadSettings().backgroundOnClose,
     openDirectory: async () => {
       fs.mkdirSync(userPetDirectory(), { recursive: true });
       const result = await shell.openPath(userPetDirectory());
