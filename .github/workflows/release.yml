@@ -1,0 +1,85 @@
+name: Build and publish installers
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: windows/package-lock.json
+
+      - name: Verify release version
+        shell: pwsh
+        run: |
+          $version = (Get-Content -Raw windows/package.json | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_NAME -ne "v$version") {
+            throw "Tag $env:GITHUB_REF_NAME does not match package version v$version"
+          }
+
+      - name: Build Android APK
+        shell: pwsh
+        run: .\android\gradlew.bat -p android assembleDebug --no-daemon
+
+      - name: Include Android APK in Windows package
+        shell: pwsh
+        run: Copy-Item android\app\build\outputs\apk\debug\app-debug.apk windows\assets\DeepSeek-Harness-Android.apk
+
+      - name: Install Windows dependencies
+        shell: pwsh
+        run: npm ci --prefix windows
+
+      - name: Build Windows installer
+        shell: pwsh
+        env:
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+          ELECTRON_BUILDER_BINARIES_MIRROR: https://npmmirror.com/mirrors/electron-builder-binaries/
+        run: npm run installer --prefix windows
+
+      - name: Prepare release files
+        shell: pwsh
+        run: |
+          $version = (Get-Content -Raw windows/package.json | ConvertFrom-Json).version
+          New-Item -ItemType Directory -Path release | Out-Null
+          Copy-Item "windows\installer\DeepSeek-Harness-Setup-$version.exe" "release\DeepSeek-Harness-Setup-$version.exe"
+          Copy-Item android\app\build\outputs\apk\debug\app-debug.apk "release\DeepSeek-Harness-Android-$version.apk"
+          Get-FileHash -Algorithm SHA256 release\*.exe,release\*.apk |
+            ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } |
+            Set-Content -Encoding ascii release\SHA256SUMS.txt
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeepSeek-Harness-${{ github.ref_name }}
+          path: release/*
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME release\* `
+            --verify-tag `
+            --generate-notes `
+            --title "DeepSeek Harness $env:GITHUB_REF_NAME"
