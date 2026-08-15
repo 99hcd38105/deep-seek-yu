@@ -6,12 +6,12 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' file: data:; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
   <title>DeepSeek Harness 桌宠</title>
   <style>
-    :root{color-scheme:light;--blue:#2563eb;--ink:#172554;--glass:rgba(255,255,255,.94)}
+    :root{color-scheme:light;--blue:#2563eb;--ink:#172554;--muted:#64748b;--glass:rgba(255,255,255,.96)}
     *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:transparent;font-family:Inter,"Segoe UI","Microsoft YaHei",sans-serif;user-select:none}
-    body{-webkit-app-region:drag}.pet-shell{position:relative;width:100%;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;padding:4px 8px 8px}
-    .status{position:absolute;z-index:4;top:4px;left:50%;transform:translateX(-50%) translateY(-8px);max-width:92%;padding:7px 12px;border:1px solid rgba(147,197,253,.75);border-radius:999px;background:var(--glass);box-shadow:0 8px 24px rgba(30,64,175,.18);color:var(--ink);font-size:12px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:0;transition:.2s;pointer-events:none}
+    body{-webkit-app-region:drag}.pet-shell{position:relative;width:100%;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;padding:5px 8px 8px;gap:7px}
+    .status{position:absolute;z-index:5;top:5px;left:50%;transform:translateX(-50%) translateY(-7px);max-width:88%;padding:6px 11px;border:1px solid rgba(147,197,253,.72);border-radius:999px;background:var(--glass);box-shadow:0 8px 24px rgba(30,64,175,.17);color:var(--ink);font-size:12px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:0;transition:.2s;pointer-events:none}
     .status.visible{opacity:1;transform:translateX(-50%) translateY(0)}
-    .pet-stage{position:relative;width:100%;flex:1;min-height:0;display:flex;align-items:flex-end;justify-content:center;cursor:pointer}
+    .pet-stage{position:relative;width:100%;flex:1 1 48%;min-height:150px;display:flex;align-items:flex-end;justify-content:center;cursor:pointer}
     .pet-image{display:block;max-width:100%;max-height:100%;object-fit:contain;filter:drop-shadow(0 9px 9px rgba(15,23,42,.22));transform-origin:50% 92%;pointer-events:none}
     .state-idle .pet-image{animation:idle 3.2s ease-in-out infinite}.state-thinking .pet-image{animation:thinking 1.8s ease-in-out infinite}.state-executing .pet-image{animation:executing .55s ease-in-out infinite}.state-success .pet-image{animation:success .7s ease-out}.state-error .pet-image{animation:error 2s ease-in-out infinite}
     @keyframes idle{0%,100%{transform:translateY(0) rotate(-.4deg)}50%{transform:translateY(-7px) rotate(.5deg)}}
@@ -19,36 +19,50 @@
     @keyframes executing{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-4px) scale(1.015)}}
     @keyframes success{0%{transform:scale(.82) rotate(-5deg)}65%{transform:scale(1.08) rotate(2deg)}100%{transform:scale(1)}}
     @keyframes error{0%,100%{transform:translateY(2px)}50%{transform:translateY(6px)}}
-    .quick-actions{position:absolute;right:5px;top:44px;display:flex;flex-direction:column;gap:6px;opacity:0;transform:translateX(5px);transition:.18s;-webkit-app-region:no-drag}.pet-shell:hover .quick-actions,.quick-actions:focus-within{opacity:1;transform:none}
-    button{font:inherit}.icon-btn{width:32px;height:32px;padding:0;border:1px solid rgba(148,163,184,.45);border-radius:10px;background:rgba(255,255,255,.9);box-shadow:0 5px 14px rgba(15,23,42,.15);cursor:pointer;color:#334155}.icon-btn:hover{background:#eff6ff;color:#1d4ed8}
-    .composer{display:none;width:100%;padding:8px;border:1px solid rgba(147,197,253,.7);border-radius:16px;background:var(--glass);box-shadow:0 12px 32px rgba(15,23,42,.24);-webkit-app-region:no-drag}.composer.open{display:block}
-    textarea{display:block;width:100%;height:54px;resize:none;border:0;outline:0;background:transparent;padding:4px 6px;color:#172554;font:13px/1.45 inherit;user-select:text}
-    .composer-row{display:flex;align-items:center;gap:6px;margin-top:5px}.hint{flex:1;color:#64748b;font-size:10px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.action{height:30px;border:0;border-radius:9px;padding:0 11px;cursor:pointer;font-weight:650}.vision{background:#e0f2fe;color:#075985}.send{background:#1d4ed8;color:white}.action:disabled{opacity:.45;cursor:default}
+    .quick-actions{position:absolute;z-index:6;right:5px;top:41px;display:flex;flex-direction:column;gap:6px;opacity:0;transform:translateX(5px);transition:.18s;-webkit-app-region:no-drag}.pet-shell:hover .quick-actions,.quick-actions:focus-within{opacity:1;transform:none}
+    button{font:inherit}.icon-btn{width:31px;height:31px;padding:0;border:1px solid rgba(148,163,184,.45);border-radius:10px;background:rgba(255,255,255,.92);box-shadow:0 5px 14px rgba(15,23,42,.14);cursor:pointer;color:#334155}.icon-btn:hover{background:#eff6ff;color:#1d4ed8}
+    .chat-panel{width:100%;flex:1 1 52%;min-height:238px;display:flex;flex-direction:column;border:1px solid rgba(147,197,253,.72);border-radius:18px;background:var(--glass);box-shadow:0 12px 32px rgba(15,23,42,.22);overflow:hidden;-webkit-app-region:no-drag;transition:.18s}
+    .chat-panel.hidden{display:none}.chat-panel.collapsed{flex:0 0 43px;min-height:43px}.chat-panel.collapsed .messages,.chat-panel.collapsed .composer{display:none}
+    .panel-head{height:43px;flex:none;display:flex;align-items:center;gap:8px;padding:0 10px;border-bottom:1px solid #edf2f7;color:#334155;cursor:pointer}
+    .state-dot{width:8px;height:8px;border-radius:999px;background:#94a3b8;box-shadow:0 0 0 3px #f1f5f9}.state-thinking .state-dot{background:#3b82f6}.state-executing .state-dot{background:#8b5cf6}.state-success .state-dot{background:#22c55e}.state-error .state-dot{background:#ef4444}
+    .panel-status{min-width:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px;font-weight:650}.collapse{width:25px;height:25px;border:0;border-radius:8px;background:transparent;color:#64748b;cursor:pointer}.collapse:hover{background:#f1f5f9}
+    .messages{min-height:64px;flex:1;overflow:auto;padding:9px 9px 4px;display:flex;flex-direction:column;gap:7px;user-select:text;scrollbar-width:thin}
+    .empty{margin:auto;padding:12px;color:#94a3b8;text-align:center;font-size:11px}.message{max-width:91%;padding:7px 9px;border-radius:12px;color:#1e293b;font-size:11px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}.message.user{align-self:flex-end;background:#e8f1ff;color:#1e3a8a}.message.assistant{align-self:flex-start;background:#f1f5f9}.message.tool{align-self:stretch;max-width:none;padding:5px 8px;border:1px dashed #cbd5e1;background:#fff;color:#64748b;font-size:10px}
+    .composer{flex:none;padding:7px;border-top:1px solid #edf2f7;background:rgba(248,250,252,.88)}
+    textarea{display:block;width:100%;height:49px;resize:none;border:0;outline:0;background:transparent;padding:3px 5px;color:#172554;font:12px/1.45 inherit;user-select:text}
+    .composer-row{display:flex;align-items:center;gap:6px}.composer-hint{flex:1;min-width:0;color:#94a3b8;font-size:10px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.circle-action{width:29px;height:29px;border:0;border-radius:10px;cursor:pointer;font-weight:700}.attach{background:#eef2f7;color:#334155;font-size:18px}.send{background:#2563eb;color:white;font-size:15px}.circle-action:hover{filter:brightness(.96)}.circle-action:disabled{opacity:.45;cursor:default}
   </style>
 </head>
 <body>
   <main id="shell" class="pet-shell state-idle">
     <div id="status" class="status">准备好了</div>
-    <section id="stage" class="pet-stage" aria-label="点击打开桌宠输入框"><img id="petImage" class="pet-image" alt="桌宠"></section>
+    <section id="stage" class="pet-stage" aria-label="点击输入消息"><img id="petImage" class="pet-image" alt="桌宠"></section>
     <nav class="quick-actions" aria-label="桌宠快捷操作">
-      <button id="mainButton" class="icon-btn" title="显示聊天窗口">▣</button>
+      <button id="mainButton" class="icon-btn" title="打开 Harness 主窗口">▣</button>
       <button id="settingsButton" class="icon-btn" title="桌宠设置">⚙</button>
       <button id="hideButton" class="icon-btn" title="隐藏桌宠">×</button>
     </nav>
-    <section id="composer" class="composer" aria-label="桌宠聊天输入">
-      <textarea id="message" placeholder="在当前会话中输入…（Ctrl+Enter 发送）"></textarea>
-      <div class="composer-row"><span id="hint" class="hint">图片会先由豆包识别</span><button id="visionButton" class="action vision">识图</button><button id="sendButton" class="action send">发送</button></div>
+    <section id="chatPanel" class="chat-panel" aria-label="桌宠聊天和进度">
+      <header id="panelHead" class="panel-head"><span class="state-dot"></span><span id="panelStatus" class="panel-status">准备好了</span><button id="collapseButton" class="collapse" title="收起聊天面板">⌄</button></header>
+      <div id="messages" class="messages"><div class="empty">这里会同步显示当前会话与执行进度</div></div>
+      <div class="composer">
+        <textarea id="message" placeholder="在当前会话中输入…（Ctrl+Enter 发送）"></textarea>
+        <div class="composer-row"><span id="hint" class="composer-hint">点击＋可直接选择图片或发送消息</span><button id="attachButton" class="circle-action attach" title="选择图片">＋</button><button id="sendButton" class="circle-action send" title="发送">↑</button></div>
+      </div>
     </section>
   </main>
   <script>
-    const shell=document.getElementById('shell');const stage=document.getElementById('stage');const image=document.getElementById('petImage');const status=document.getElementById('status');const composer=document.getElementById('composer');const message=document.getElementById('message');const send=document.getElementById('sendButton');const vision=document.getElementById('visionButton');const hint=document.getElementById('hint');
-    let current={status:'idle',statusText:'准备好了',showStatus:true,actions:{}};const errorText=error=>String(error?.message||error||'操作失败').replace(/^Error invoking remote method '[^']+': Error:\s*/,'');
+    const shell=document.getElementById('shell');const stage=document.getElementById('stage');const image=document.getElementById('petImage');const status=document.getElementById('status');const panel=document.getElementById('chatPanel');const panelHead=document.getElementById('panelHead');const panelStatus=document.getElementById('panelStatus');const messageList=document.getElementById('messages');const message=document.getElementById('message');const send=document.getElementById('sendButton');const attach=document.getElementById('attachButton');const hint=document.getElementById('hint');const collapse=document.getElementById('collapseButton');
+    let current={status:'idle',statusText:'准备好了',showStatus:true,showChatPanel:true,messages:[],actions:{}};let collapsed=false;let messageSignature='';const errorText=error=>String(error?.message||error||'操作失败').replace(/^Error invoking remote method '[^']+': Error:\s*/,'');
     const labels={idle:'准备好了',thinking:'正在思考…',executing:'正在执行命令…',success:'完成啦',error:'遇到问题了'};
-    function render(next){current={...current,...next};const state=current.status||'idle';shell.className=`pet-shell state-${state}`;status.textContent=current.statusText||labels[state]||labels.idle;status.classList.toggle('visible',current.showStatus!==false);const url=(current.actions&&current.actions[state])||(current.actions&&current.actions.idle);if(url&&image.src!==url)image.src=url;hint.textContent=current.visionReady?'豆包识图已配置':'请先在设置中填写豆包密钥';}
-    stage.addEventListener('click',()=>{composer.classList.toggle('open');if(composer.classList.contains('open'))message.focus()});
-    async function submit(){const value=message.value.trim();if(!value)return;send.disabled=true;try{await window.desktopPet.sendMessage(value);message.value='';composer.classList.remove('open')}catch(error){hint.textContent=errorText(error)}finally{send.disabled=false}}
-    send.addEventListener('click',submit);message.addEventListener('keydown',(event)=>{if(event.key==='Enter'&&event.ctrlKey){event.preventDefault();submit()}});
-    vision.addEventListener('click',async()=>{vision.disabled=true;try{await window.desktopPet.chooseImage(message.value.trim());message.value='';composer.classList.remove('open')}catch(error){hint.textContent=errorText(error)}finally{vision.disabled=false}});
+    function renderMessages(items){const signature=JSON.stringify(items||[]);if(signature===messageSignature)return;messageSignature=signature;messageList.innerHTML='';if(!items?.length){const empty=document.createElement('div');empty.className='empty';empty.textContent='这里会同步显示当前会话与执行进度';messageList.appendChild(empty);return}for(const item of items){const bubble=document.createElement('div');bubble.className=`message ${item.role||'assistant'}`;bubble.textContent=item.text||'';messageList.appendChild(bubble)}messageList.scrollTop=messageList.scrollHeight}
+    function render(next){current={...current,...next};const state=current.status||'idle';shell.className=`pet-shell state-${state}`;const text=current.statusText||labels[state]||labels.idle;status.textContent=text;panelStatus.textContent=text;status.classList.toggle('visible',current.showStatus!==false);panel.classList.toggle('hidden',current.showChatPanel===false);const url=(current.actions&&current.actions[state])||(current.actions&&current.actions.idle);if(url&&image.src!==url)image.src=url;renderMessages(current.messages||[])}
+    function setCollapsed(value){collapsed=value;panel.classList.toggle('collapsed',collapsed);collapse.textContent=collapsed?'⌃':'⌄';collapse.title=collapsed?'展开聊天面板':'收起聊天面板'}
+    panelHead.addEventListener('click',event=>{if(event.target===collapse||event.target===panelHead||event.target===panelStatus)setCollapsed(!collapsed)});
+    stage.addEventListener('click',()=>{if(current.showChatPanel!==false){setCollapsed(false);message.focus()}});
+    async function submit(){const value=message.value.trim();if(!value)return;send.disabled=true;hint.textContent='正在发送…';try{await window.desktopPet.sendMessage(value);message.value='';hint.textContent='已发送到当前会话'}catch(error){hint.textContent=errorText(error)}finally{send.disabled=false}}
+    send.addEventListener('click',submit);message.addEventListener('keydown',event=>{if(event.key==='Enter'&&event.ctrlKey){event.preventDefault();submit()}});
+    attach.addEventListener('click',async()=>{attach.disabled=true;hint.textContent='请选择图片';try{const result=await window.desktopPet.chooseImage(message.value.trim());if(!result?.canceled){message.value='';hint.textContent='已自动识别并发送'}}catch(error){hint.textContent=errorText(error)}finally{attach.disabled=false}});
     document.getElementById('settingsButton').addEventListener('click',()=>window.desktopPet.openSettings());document.getElementById('hideButton').addEventListener('click',()=>window.desktopPet.hide());document.getElementById('mainButton').addEventListener('click',()=>window.desktopPet.showMainWindow());
     window.desktopPet.onState(render);window.desktopPet.getState().then(render);
   </script>

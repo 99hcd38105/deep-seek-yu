@@ -24,75 +24,7 @@ const STATUS_TEXT = {
   error: '遇到问题了',
 };
 
-const HARNESS_BRIDGE_SCRIPT = `(() => {
-  if (window.__dshDesktopPetBridgeInstalled) return true;
-  const visible = (element) => {
-    if (!(element instanceof HTMLElement)) return false;
-    const style = getComputedStyle(element);
-    const rect = element.getBoundingClientRect();
-    return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 1 && rect.height > 1;
-  };
-  const label = (element) => [
-    element.getAttribute('aria-label'),
-    element.getAttribute('title'),
-    element.getAttribute('data-testid'),
-    element.textContent,
-  ].filter(Boolean).join(' ').trim();
-  const editors = () => [...document.querySelectorAll('textarea,[contenteditable="true"],[role="textbox"]')]
-    .filter((element) => visible(element) && !element.disabled && element.getAttribute('aria-disabled') !== 'true')
-    .sort((left, right) => right.getBoundingClientRect().bottom - left.getBoundingClientRect().bottom);
-  const setEditorText = (editor, text) => {
-    editor.focus();
-    if (editor instanceof HTMLTextAreaElement || editor instanceof HTMLInputElement) {
-      const prototype = editor instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-      const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
-      if (setter) setter.call(editor, text); else editor.value = text;
-      editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
-      editor.dispatchEvent(new Event('change', { bubbles: true }));
-      return;
-    }
-    const selection = getSelection();
-    const range = document.createRange();
-    range.selectNodeContents(editor);
-    selection.removeAllRanges();
-    selection.addRange(range);
-    document.execCommand('insertText', false, text);
-    editor.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
-  };
-  window.__dshDesktopPetSend = async (text) => {
-    const editor = editors()[0];
-    if (!editor) return { ok: false, error: '没有找到当前聊天输入框，请先打开一个会话。' };
-    setEditorText(editor, text);
-    await new Promise((resolve) => setTimeout(resolve, 120));
-    const container = editor.closest('form') || editor.parentElement?.parentElement || document.body;
-    let send = [...container.querySelectorAll('button')].find((button) => {
-      const value = label(button);
-      return visible(button) && !button.disabled && (/^(发送|send)$/i.test(value) || /发送消息|send message|submit/i.test(value));
-    });
-    if (!send) send = container.querySelector('button[type="submit"]:not([disabled])');
-    if (!send) {
-      const editorRect = editor.getBoundingClientRect();
-      send = [...document.querySelectorAll('button')].filter((button) => visible(button) && !button.disabled)
-        .filter((button) => {
-          const rect = button.getBoundingClientRect();
-          return rect.left >= editorRect.left && rect.top >= editorRect.top - 20 && rect.top <= editorRect.bottom + 80;
-        }).sort((left, right) => right.getBoundingClientRect().right - left.getBoundingClientRect().right)[0];
-    }
-    if (!send) return { ok: false, error: '已经写入输入框，但没有找到发送按钮。' };
-    send.click();
-    return { ok: true };
-  };
-  window.__dshDesktopPetStatus = () => {
-    const buttons = [...document.querySelectorAll('button')].filter(visible);
-    const stop = buttons.find((button) => /停止生成|停止回答|stop generating|stop response|cancel generation/i.test(label(button)));
-    const tail = String(document.body.innerText || '').slice(-10000);
-    const command = Boolean(stop) && /执行命令|正在运行|running command|powershell|terminal|shell|bash|command/i.test(tail);
-    const alerts = [...document.querySelectorAll('[role="alert"]')].filter(visible).map((item) => item.textContent || '').join(' ');
-    return { busy: Boolean(stop), command, hasError: /失败|错误|error|failed/i.test(alerts) };
-  };
-  window.__dshDesktopPetBridgeInstalled = true;
-  return true;
-})()`;
+const HARNESS_BRIDGE_SCRIPT = fs.readFileSync(path.join(__dirname, 'pet-harness-bridge.js'), 'utf8');
 
 function clamp(value, minimum, maximum) {
   const number = Number(value);
@@ -128,6 +60,7 @@ function normalizeSettings(value = {}) {
     enabled: value.enabled !== false,
     alwaysOnTop: value.alwaysOnTop !== false,
     showStatus: value.showStatus !== false,
+    showChatPanel: value.showChatPanel !== false,
     size: Math.round(clamp(value.size ?? 300, 220, 420) / 10) * 10,
     opacity: clamp(value.opacity ?? 1, 0.55, 1),
     characterId: safeIdentifier(value.characterId) || 'default-maid',
@@ -154,8 +87,11 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
   let successTimer = null;
   let moveTimer = null;
   let monitorRunning = false;
+  let imageProcessing = false;
   let lastBusy = false;
   let lastSubmitAt = 0;
+  let messages = [];
+  let messagesSignature = '';
   let destroyed = false;
   const handlers = [];
 
@@ -241,7 +177,9 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
       status,
       statusText,
       showStatus: loadSettings().showStatus,
+      showChatPanel: loadSettings().showChatPanel,
       visionReady: Boolean(visionApiKey()),
+      messages,
       characterId: selected?.id || '',
       actions: selected?.actions || {},
     };
@@ -275,12 +213,18 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
   function defaultBounds() {
     const current = loadSettings();
     const width = current.size;
-    const height = Math.round(current.size * 1.28);
     const workArea = screen.getPrimaryDisplay().workArea;
+    const desiredHeight = Math.round(current.size * (current.showChatPanel ? 1.9 : 1.28));
+    const height = Math.min(desiredHeight, workArea.height - 20);
     const saved = current.position;
     if (saved && saved.x >= workArea.x - width + 80 && saved.x <= workArea.x + workArea.width - 80
       && saved.y >= workArea.y && saved.y <= workArea.y + workArea.height - 80) {
-      return { x: saved.x, y: saved.y, width, height };
+      return {
+        x: Math.round(clamp(saved.x, workArea.x - width + 80, workArea.x + workArea.width - 80)),
+        y: Math.round(clamp(saved.y, workArea.y, workArea.y + workArea.height - height)),
+        width,
+        height,
+      };
     }
     return { x: workArea.x + workArea.width - width - 24, y: workArea.y + workArea.height - height - 18, width, height };
   }
@@ -389,7 +333,7 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
     try { return Boolean(await mainWindow.webContents.executeJavaScript(HARNESS_BRIDGE_SCRIPT, true)); } catch { return false; }
   }
 
-  async function sendMessage(message) {
+  async function sendMessage(message, options = {}) {
     const text = String(message || '').trim();
     if (!text) throw new Error('请输入要发送的内容。');
     if (text.length > 12000) throw new Error('消息过长，请控制在 12000 个字符以内。');
@@ -398,7 +342,8 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
     clearTimeout(successTimer);
     lastSubmitAt = Date.now();
     setStatus('thinking');
-    const result = await mainWindow.webContents.executeJavaScript(`window.__dshDesktopPetSend(${JSON.stringify(text)})`, true);
+    const result = await mainWindow.webContents.executeJavaScript(
+      `window.__dshDesktopPetSend(${JSON.stringify(text)}, ${JSON.stringify(options)})`, true);
     if (!result?.ok) {
       setStatus('error', result?.error || '发送失败');
       scheduleIdle(3500);
@@ -407,18 +352,21 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
     return { ok: true };
   }
 
-  async function analyzeImage(filename, question) {
+  function validateImageDataUrl(value) {
+    const match = /^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/=]+)$/.exec(String(value || ''));
+    if (!match) throw new Error('图片格式无效，仅支持 PNG、JPG、WebP 和 GIF。');
+    const bytes = Math.floor(match[2].length * 3 / 4) - (match[2].endsWith('==') ? 2 : match[2].endsWith('=') ? 1 : 0);
+    if (bytes > 10 * 1024 * 1024) throw new Error('图片不能超过 10 MB。');
+    return String(value);
+  }
+
+  async function analyzeImageData(dataUrl, question) {
     const apiKey = visionApiKey();
     if (!apiKey) {
       openSettings();
       throw new Error('请先在桌宠设置中填写火山方舟 API Key。');
     }
-    const extension = path.extname(filename).toLowerCase();
-    const mime = IMAGE_MIME.get(extension);
-    if (!mime) throw new Error('仅支持 PNG、JPG、WebP 和 GIF 图片。');
-    const stat = fs.statSync(filename);
-    if (stat.size > 10 * 1024 * 1024) throw new Error('图片不能超过 10 MB。');
-    const dataUrl = `data:${mime};base64,${fs.readFileSync(filename).toString('base64')}`;
+    const validatedDataUrl = validateImageDataUrl(dataUrl);
     const userQuestion = String(question || '').trim().slice(0, 2000);
     const prompt = userQuestion
       ? `请用中文准确、详细地识别这张图片，并重点回答用户的问题：${userQuestion}。如果是报错截图，请提取关键报错；如果是界面图，请描述布局、文字和可见状态。不要猜测看不清的内容。`
@@ -435,7 +383,7 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
           model: loadSettings().visionModel,
           messages: [{ role: 'user', content: [
             { type: 'text', text: prompt },
-            { type: 'image_url', image_url: { url: dataUrl } },
+            { type: 'image_url', image_url: { url: validatedDataUrl } },
           ] }],
           temperature: 0.1,
           max_tokens: 1400,
@@ -458,9 +406,35 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
     return { description, userQuestion };
   }
 
+  async function processImageData(dataUrl, question) {
+    if (imageProcessing) throw new Error('上一张图片仍在识别，请稍候。');
+    imageProcessing = true;
+    clearTimeout(successTimer);
+    setStatus('thinking', '正在识别图片…');
+    try {
+      const result = await analyzeImageData(dataUrl, question);
+      const combined = [
+        '用户附加了一张图片。以下是视觉模型返回的文字描述，请只把它作为图片上下文继续完成用户请求：',
+        '',
+        result.description,
+        '',
+        `用户问题：${result.userQuestion || '请根据识图结果解释图片内容，并给出有用的下一步。'}`,
+      ].join('\n');
+      await sendMessage(combined, { requireNoImage: true });
+      return { ok: true };
+    } catch (error) {
+      setStatus('error', error.message);
+      scheduleIdle(4500);
+      if (!visionApiKey()) openSettings();
+      throw error;
+    } finally {
+      imageProcessing = false;
+    }
+  }
+
   async function chooseImage(question) {
     if (!visionApiKey()) {
-      setStatus('error', '请先配置豆包识图');
+      setStatus('error', '请先配置图片识别');
       scheduleIdle(4500);
       openSettings();
       throw new Error('请先在桌宠设置中填写火山方舟 API Key。');
@@ -471,19 +445,15 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
       filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }],
     });
     if (selection.canceled || !selection.filePaths[0]) return { canceled: true };
-    clearTimeout(successTimer);
-    setStatus('thinking', '正在用豆包识图…');
     try {
-      const result = await analyzeImage(selection.filePaths[0], question);
-      const combined = [
-        '用户附加了一张图片。以下内容由豆包视觉模型识别，请把它当作图片上下文继续完成用户请求：',
-        '',
-        result.description,
-        '',
-        `用户问题：${result.userQuestion || '请根据识图结果解释图片内容，并给出有用的下一步。'}`,
-      ].join('\n');
-      await sendMessage(combined);
-      return { ok: true };
+      const filename = selection.filePaths[0];
+      const extension = path.extname(filename).toLowerCase();
+      const mime = IMAGE_MIME.get(extension);
+      if (!mime) throw new Error('仅支持 PNG、JPG、WebP 和 GIF 图片。');
+      const stat = fs.statSync(filename);
+      if (stat.size > 10 * 1024 * 1024) throw new Error('图片不能超过 10 MB。');
+      const dataUrl = `data:${mime};base64,${fs.readFileSync(filename).toString('base64')}`;
+      return await processImageData(dataUrl, question);
     } catch (error) {
       setStatus('error', error.message);
       scheduleIdle(4500);
@@ -496,8 +466,27 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
     monitorRunning = true;
     try {
       await installHarnessBridge();
-      const current = await mainWindow.webContents.executeJavaScript('window.__dshDesktopPetStatus && window.__dshDesktopPetStatus()', true);
+      const snapshot = await mainWindow.webContents.executeJavaScript(
+        'window.__dshDesktopPetSnapshot && window.__dshDesktopPetSnapshot()', true);
+      const current = snapshot?.status;
       if (!current) return;
+      const nextMessages = Array.isArray(current.messages) ? current.messages : [];
+      const nextSignature = JSON.stringify(nextMessages);
+      if (nextSignature !== messagesSignature) {
+        messages = nextMessages;
+        messagesSignature = nextSignature;
+        broadcastState();
+      }
+      for (const action of Array.isArray(snapshot.actions) ? snapshot.actions : []) {
+        if (action?.type === 'show-pet') showPet();
+        if (action?.type === 'bridge-error') {
+          setStatus('error', action.message || '读取图片失败');
+          scheduleIdle(4500);
+        }
+        if (action?.type === 'image-data') {
+          processImageData(action.dataUrl, action.question).catch(() => {});
+        }
+      }
       if (current.busy) {
         clearTimeout(successTimer);
         setStatus(current.command ? 'executing' : 'thinking');
