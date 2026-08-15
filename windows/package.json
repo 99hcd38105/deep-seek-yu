@@ -1,0 +1,81 @@
+{
+  "name": "deepseek-harness-desktop",
+  "version": "1.0.6",
+  "private": true,
+  "description": "DeepSeek Harness desktop client",
+  "author": "Local build",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-packager . \"DeepSeek Harness\" --platform=win32 --arch=x64 --icon=assets/DeepSeek-Harness-icon.ico --out=dist --overwrite --prune=true",
+    "installer": "electron-builder --win nsis"
+  },
+  "dependencies": {
+    "@deepseek-ai/cordis-plugin-group": "1.0.1",
+    "@deepseek-ai/dsh": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-anonymous-user-id": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-atomic-write": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-bash-local": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-code-runtime": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-compaction": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-fs": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-invariants": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-output-retention": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-sandbox": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-scope": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-session-telemetry": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-session-title-llm": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-shell": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-spill": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-subagent-in-process-driver": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-subprocess": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-timeout": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-workflow": "0.1.0-rc.6"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "electron": "43.4.0",
+    "electron-builder": "26.15.3",
+    "playwright": "^1.62.1"
+  },
+  "build": {
+    "appId": "ai.deepseek.harness.desktop",
+    "productName": "DeepSeek Harness",
+    "asar": false,
+    "npmRebuild": false,
+    "compression": "normal",
+    "directories": {
+      "output": "installer"
+    },
+    "files": [
+      "main.js",
+      "mobile-gateway.mjs",
+      "assets/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "assets/DeepSeek-Harness-icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "DeepSeek-Harness-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowElevation": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "DeepSeek Harness",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "installerIcon": "assets/DeepSeek-Harness-icon.ico",
+      "uninstallerIcon": "assets/DeepSeek-Harness-icon.ico"
+    }
+  }
+}

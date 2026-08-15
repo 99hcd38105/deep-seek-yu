@@ -1,0 +1,33 @@
+# Dependencies and generated build output
+node_modules/
+.gradle/
+**/build/
+windows/dist/
+windows/installer/
+
+# Local toolchains and downloaded archives
+.tools/
+.downloads/
+release/
+
+# Packaged binaries
+*.apk
+*.exe
+*.blockmap
+
+# Machine-specific configuration
+android/local.properties
+.env
+.env.*
+!.env.example
+
+# QA screenshots and logs
+windows/mobile-*.png
+*.log
+
+# Editor and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
