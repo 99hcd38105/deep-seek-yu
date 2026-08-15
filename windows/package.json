@@ -1,6 +1,6 @@
 {
   "name": "deepseek-harness-desktop",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "private": true,
   "description": "DeepSeek Harness desktop client",
   "author": "Local build",
@@ -66,10 +66,11 @@
       "artifactName": "DeepSeek-Harness-Setup-${version}.${ext}"
     },
     "nsis": {
-      "oneClick": true,
+      "oneClick": false,
       "perMachine": false,
-      "allowElevation": false,
-      "createDesktopShortcut": true,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": false,
       "createStartMenuShortcut": true,
       "shortcutName": "DeepSeek Harness",
       "runAfterFinish": true,

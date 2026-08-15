@@ -2,6 +2,9 @@
 node_modules/
 .gradle/
 **/build/
+!windows/build/
+windows/build/*
+!windows/build/installer.nsh
 windows/dist/
 windows/installer/
 
