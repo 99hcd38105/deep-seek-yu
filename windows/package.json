@@ -2,7 +2,7 @@
   "name": "deepseek-harness-desktop",
   "version": "1.1.0",
   "private": true,
-  "description": "deep seek yu desktop client",
+  "description": "DeepSeek yu desktop client",
   "author": "Local build",
   "main": "main.js",
   "scripts": {
@@ -10,7 +10,7 @@
     "preinstaller": "node scripts/prepare-node-runtime.mjs",
     "start": "electron .",
     "test:internal-vision": "node scripts/test-harness-local-vision.mjs && node scripts/test-deepseek-local-vision-adapter.mjs",
-    "build": "electron-packager . \"deep seek yu\" --platform=win32 --arch=x64 --icon=assets/deep-seek-yu-icon.ico --out=dist --overwrite --prune=true",
+    "build": "electron-packager . \"DeepSeek yu\" --platform=win32 --arch=x64 --icon=assets/deep-seek-yu-icon.ico --out=dist --overwrite --prune=true --no-asar",
     "installer": "electron-builder --win nsis"
   },
   "dependencies": {
@@ -54,7 +54,7 @@
   },
   "build": {
     "appId": "ai.deepseek.harness.desktop",
-    "productName": "deep seek yu",
+    "productName": "DeepSeek yu",
     "asar": false,
     "electronDist": "node_modules/electron/dist",
     "npmRebuild": false,
@@ -70,10 +70,7 @@
       "pet-manager.js",
       "pet-preload.js",
       "pet-window.html",
-      "pet-settings.html",
       "extensions-manager.js",
-      "extensions-preload.js",
-    "extensions-window.html",
     "harness-runtime-manager.js",
     "node-runtime.js",
     "runtime/node.exe",
@@ -101,7 +98,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": false,
       "createStartMenuShortcut": true,
-      "shortcutName": "deep seek yu",
+      "shortcutName": "DeepSeek yu",
       "runAfterFinish": true,
       "deleteAppDataOnUninstall": false,
       "installerIcon": "assets/deep-seek-yu-icon.ico",

@@ -28,14 +28,14 @@ Function InstallOptionsPageCreate
     Abort
   ${EndIf}
 
-  ${NSD_CreateLabel} 0 0 100% 24u "请选择 deep seek yu 的安装选项："
+  ${NSD_CreateLabel} 0 0 100% 24u "请选择 DeepSeek yu 的安装选项："
   Pop $0
 
   ${NSD_CreateCheckbox} 0 34u 100% 14u "创建桌面快捷方式（推荐）"
   Pop $DesktopShortcutCheckbox
   ${NSD_SetState} $DesktopShortcutCheckbox $DesktopShortcutOption
 
-  ${NSD_CreateCheckbox} 0 62u 100% 14u "开机时自动启动 deep seek yu"
+  ${NSD_CreateCheckbox} 0 62u 100% 14u "开机时自动启动 DeepSeek yu"
   Pop $AutoStartCheckbox
   ${NSD_SetState} $AutoStartCheckbox $AutoStartOption
 

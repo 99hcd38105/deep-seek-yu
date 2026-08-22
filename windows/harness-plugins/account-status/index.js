@@ -1,14 +1,9 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import z from '@deepseek-ai/schemastery';
 
 export const name = 'deep-seek-yu-account-status';
 export const inject = ['webServer', 'credentials'];
 export const Config = z.object({ enabled: z.boolean().default(true) });
 
-const directory = path.dirname(fileURLToPath(import.meta.url));
-const clientScript = fs.readFileSync(path.join(directory, 'client.js'));
 let cache = null;
 let cacheAt = 0;
 
@@ -92,15 +87,6 @@ export function apply(ctx, config) {
   if (config.enabled === false) return;
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',
-    path: '/deep-seek-yu/account-status.js',
-    handler(req, res) {
-      if (req.method !== 'GET' && req.method !== 'HEAD') return sendJson(res, 405, { error: 'method-not-allowed' });
-      res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' });
-      res.end(req.method === 'HEAD' ? undefined : clientScript);
-    },
-  }), 'deep-seek-yu account status client');
-  ctx.effect(() => ctx.webServer.register({
-    kind: 'exact',
     path: '/deep-seek-yu/api/account-status',
     async handler(req, res) {
       if (req.method !== 'GET') return sendJson(res, 405, { error: 'method-not-allowed' });
@@ -108,7 +94,4 @@ export function apply(ctx, config) {
       catch (error) { sendJson(res, 500, { error: String(error?.message || error).slice(0, 160) }); }
     },
   }), 'deep-seek-yu account status api');
-  ctx.on('webserver/index-inject', (table) => {
-    table.push({ kind: 'script-src', placement: 'body', src: '/deep-seek-yu/account-status.js' });
-  });
 }

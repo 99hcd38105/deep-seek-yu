@@ -346,7 +346,7 @@ async function ensureHarness() {
   if (!(await canConnect('127.0.0.1', harnessPort))) {
     const dshEntry = findDshEntry();
     if (!dshEntry) {
-      throw new Error('没有找到 deep seek yu 所需的 Harness 运行环境。请重新安装客户端。');
+      throw new Error('没有找到 DeepSeek yu 所需的 Harness 运行环境。请重新安装客户端。');
     }
     const dshArguments = [
       dshEntry,
@@ -354,6 +354,7 @@ async function ensureHarness() {
       '--patch', directoryPickerPatch(),
       '--host', '127.0.0.1',
       '--port', String(harnessPort),
+      '--no-open',
     ];
     if (app.isPackaged) dshArguments.unshift('--expose-internals');
     const visionProxyRule = await session.defaultSession.resolveProxy('https://huggingface.co/');
@@ -516,11 +517,6 @@ function installMenu() {
             });
           },
         },
-        {
-          label: '官方更新与插件市场',
-          enabled: Boolean(extensionsManager),
-          click: () => extensionsManager?.open(),
-        },
         { type: 'separator' },
         { label: '退出', role: 'quit' },
       ],
@@ -609,38 +605,6 @@ function installMenu() {
         { role: 'zoomOut', label: '缩小' },
       ],
     },
-    {
-      label: '桌宠',
-      submenu: [
-        {
-          label: desktopPet?.isVisible() ? '隐藏桌宠' : '显示桌宠',
-          enabled: Boolean(desktopPet),
-          click: () => desktopPet?.isVisible() ? desktopPet.hide() : desktopPet?.show(),
-        },
-        {
-          label: '桌宠设置',
-          enabled: Boolean(desktopPet),
-          click: () => desktopPet?.openSettings(),
-        },
-        { type: 'separator' },
-        {
-          label: '打开自定义桌宠目录',
-          enabled: Boolean(desktopPet),
-          click: async () => {
-            try {
-              await desktopPet?.openDirectory();
-            } catch (error) {
-              await dialog.showMessageBox(mainWindow, {
-                type: 'error',
-                title: '无法打开桌宠目录',
-                message: error.message,
-                buttons: ['确定'],
-              });
-            }
-          },
-        },
-      ],
-    },
   ]));
 }
 
@@ -654,7 +618,7 @@ function showMainWindow() {
 function updateTrayMenu() {
   if (!tray || tray.isDestroyed()) return;
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: '打开 deep seek yu', click: showMainWindow },
+    { label: '打开 DeepSeek yu', click: showMainWindow },
     {
       label: desktopPet?.isVisible() ? '隐藏桌宠' : '显示桌宠',
       enabled: Boolean(desktopPet),
@@ -668,7 +632,7 @@ function updateTrayMenu() {
 function createTray() {
   if (tray && !tray.isDestroyed()) return;
   tray = new Tray(path.join(app.getAppPath(), 'assets', 'deep-seek-yu-icon.ico'));
-  tray.setToolTip('deep seek yu');
+  tray.setToolTip('DeepSeek yu');
   tray.on('click', showMainWindow);
   updateTrayMenu();
 }
@@ -676,7 +640,7 @@ function createTray() {
 function createWindow() {
   const appUrl = localUrl();
   mainWindow = new BrowserWindow({
-    title: 'deep seek yu',
+    title: 'DeepSeek yu',
     width: 1280,
     height: 820,
     minWidth: 860,
@@ -739,19 +703,12 @@ if (!gotLock) {
         }
       }
       mobileSettings();
-      runtimeManager = createHarnessRuntimeManager({ app });
+      runtimeManager = createHarnessRuntimeManager({
+        app,
+        resolveProxy: (url) => session.defaultSession.resolveProxy(url),
+      });
       await ensureHarness();
       createWindow();
-      desktopPet = createDesktopPet({
-        app,
-        mainWindow,
-        onMenuChange: () => {
-          if (!quitting) {
-            installMenu();
-            updateTrayMenu();
-          }
-        },
-      }).start();
       extensionsManager = createExtensionsManager({
         app,
         mainWindow,
@@ -759,13 +716,24 @@ if (!gotLock) {
         dshHome,
         onRestartRequired: () => {},
       });
+      desktopPet = createDesktopPet({
+        app,
+        mainWindow,
+        onPluginAction: (action) => extensionsManager.dispatch(action),
+        onMenuChange: () => {
+          if (!quitting) {
+            installMenu();
+            updateTrayMenu();
+          }
+        },
+      }).start();
       createTray();
       installMenu();
       initializing = false;
     } catch (error) {
       await dialog.showMessageBox({
         type: 'error',
-        title: 'deep seek yu 启动失败',
+        title: 'DeepSeek yu 启动失败',
         message: error.message,
         buttons: ['关闭'],
       });

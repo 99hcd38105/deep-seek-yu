@@ -77,7 +77,7 @@ function deny(response, status, message) {
     'cache-control': 'no-store',
     'x-content-type-options': 'nosniff',
   });
-  response.end(`<!doctype html><meta name="viewport" content="width=device-width"><title>deep seek yu</title><style>body{font:16px system-ui;margin:3rem auto;max-width:34rem;padding:0 1rem;color:#202124}code{background:#f3f4f6;padding:.2rem .4rem;border-radius:.35rem}</style><h1>无法访问</h1><p>${message}</p>`);
+  response.end(`<!doctype html><meta name="viewport" content="width=device-width"><title>DeepSeek yu</title><style>body{font:16px system-ui;margin:3rem auto;max-width:34rem;padding:0 1rem;color:#202124}code{background:#f3f4f6;padding:.2rem .4rem;border-radius:.35rem}</style><h1>无法访问</h1><p>${message}</p>`);
 }
 
 function forwardedHeaders(request) {
@@ -252,5 +252,5 @@ server.on('upgrade', (request, socket, head) => {
 });
 
 server.listen(listenPort, '0.0.0.0', () => {
-  console.log(`deep seek yu mobile gateway: http://0.0.0.0:${listenPort}`);
+  console.log(`DeepSeek yu mobile gateway: http://0.0.0.0:${listenPort}`);
 });

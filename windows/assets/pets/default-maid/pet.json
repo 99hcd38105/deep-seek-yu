@@ -1,7 +1,7 @@
 {
   "id": "default-maid",
   "name": "蓝鲸女仆",
-  "author": "deep seek yu Community",
+  "author": "DeepSeek yu Community",
   "actions": {
     "idle": "idle.png",
     "thinking": "thinking.png",

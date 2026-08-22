@@ -1,4 +1,4 @@
-name: Build and publish deep seek yu installers
+name: Build and publish DeepSeek yu installers
 
 on:
   push:
@@ -83,7 +83,7 @@ jobs:
           $arguments = @($env:GITHUB_REF_NAME) + @($releaseFiles) + @(
             '--verify-tag',
             '--generate-notes',
-            '--title', "deep seek yu $env:GITHUB_REF_NAME"
+            '--title', "DeepSeek yu $env:GITHUB_REF_NAME"
           )
           if ($env:GITHUB_REF_NAME -match '-') {
             $arguments += '--prerelease'

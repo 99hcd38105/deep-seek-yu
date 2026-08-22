@@ -13,6 +13,7 @@ const BRAND_SIDEBAR_MARKER = 'deep-seek-yu-sidebar-brand-v1';
 const BRAND_RUNTIME_MARKER = 'deep-seek-yu-runtime-brand-v1';
 const BRAND_OFFICIAL_MARKER = 'deep-seek-yu-official-brand-v1';
 const BRAND_DOCUMENT_MARKER = 'deep-seek-yu-document-title-v1';
+const MODEL_SELECTION_TIMEOUT_MARKER = 'deep-seek-yu-model-selection-timeout-v1';
 
 function replaceOnce(source, before, after, target) {
   const first = source.indexOf(before);
@@ -129,7 +130,7 @@ patchFile(
   source => replaceOnce(
     source,
     'children: "DSH Local Build"',
-    'children: "deep seek yu"',
+    'children: "DeepSeek yu"',
     'Harness sidebar brand',
   ),
 );
@@ -140,7 +141,7 @@ patchFile(
   source => replaceOnce(
     source,
     'return (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.BrandWordmark, { includeMark: false });',
-    'return (0, react_jsx_runtime.jsx)("span", { style: { fontSize: 17, fontWeight: 750, whiteSpace: "nowrap" }, children: "deep seek yu" });',
+    'return (0, react_jsx_runtime.jsx)("span", { style: { fontSize: 17, fontWeight: 750, whiteSpace: "nowrap" }, children: "DeepSeek yu" });',
     'Harness official brand slot',
   ),
 );
@@ -148,14 +149,14 @@ patchFile(
 patchFile(
   'node_modules/@deepseek-ai/dsh-client-ui-renderer/lib/client.js',
   BRAND_DOCUMENT_MARKER,
-  source => replaceOnce(source, 'const productTitle = "DeepSeek Harness";', 'const productTitle = "deep seek yu";', 'Harness live document title'),
+  source => replaceOnce(source, 'const productTitle = "DeepSeek Harness";', 'const productTitle = "DeepSeek yu";', 'Harness live document title'),
 );
 
 patchFile(
   'node_modules/@deepseek-ai/dsh-web-app/lib/index.js',
   BRAND_RUNTIME_MARKER,
   (source) => {
-    const branded = source.replaceAll('DeepSeek Harness Web GUI', 'deep seek yu Web GUI');
+    const branded = source.replaceAll('DeepSeek Harness Web GUI', 'DeepSeek yu Web GUI');
     if (branded === source) throw new Error('Harness runtime brand target changed.');
     return branded;
   },
@@ -164,14 +165,14 @@ patchFile(
 replaceTextFile(
   'node_modules/@deepseek-ai/dsh-web-frontend/dist/index.html',
   '<title>DeepSeek Harness</title>',
-  '<title>deep seek yu</title>',
+  '<title>DeepSeek yu</title>',
   'Harness document title',
 );
 
 replaceTextFile(
   'node_modules/@deepseek-ai/dsh-web-frontend/dist/manifest.webmanifest',
   '"name": "DeepSeek Harness",\n  "short_name": "DSH"',
-  '"name": "deep seek yu",\n  "short_name": "deep seek yu"',
+  '"name": "DeepSeek yu",\n  "short_name": "DeepSeek yu"',
   'Harness PWA manifest brand',
 );
 
@@ -222,6 +223,36 @@ function contentNeedsNativeImage(blocks) {
       'const hasImages = options.messages.some((message) => contentHasImage(message.content));',
       'const hasImages = options.messages.some((message) => contentNeedsNativeImage(message.content));',
       'DeepSeek native image detection',
+    );
+    return source;
+  },
+);
+
+patchFile(
+  'node_modules/@deepseek-ai/dsh-client-ui-model-selection/lib/client.js',
+  MODEL_SELECTION_TIMEOUT_MARKER,
+  (initial) => {
+    let source = replaceOnce(
+      initial,
+      'const { result } = await this.sessions.models({ sessionId: this.sessionId });',
+      'const { result } = await Promise.race([this.sessions.models({ sessionId: this.sessionId }), new Promise((resolve) => setTimeout(() => resolve({ result: { ok: false, error: { code: "TIMEOUT", message: "刷新模型列表超时，请重试。" } } }), 15000))]);',
+      'model directory timeout',
+    );
+    source = replaceOnce(
+      source,
+      `const { result } = await this.sessions.selectModel({
+					sessionId: this.sessionId,
+					provider: selection.provider,
+					model: selection.model,
+					...selection.reasoningEffort === void 0 ? {} : { reasoningEffort: selection.reasoningEffort }
+				});`,
+      `const { result } = await Promise.race([this.sessions.selectModel({
+					sessionId: this.sessionId,
+					provider: selection.provider,
+					model: selection.model,
+					...selection.reasoningEffort === void 0 ? {} : { reasoningEffort: selection.reasoningEffort }
+				}), new Promise((resolve) => setTimeout(() => resolve({ result: { ok: false, error: { code: "TIMEOUT", message: "切换模型超时，请重试。" } } }), 20000))]);`,
+      'model selection timeout',
     );
     return source;
   },

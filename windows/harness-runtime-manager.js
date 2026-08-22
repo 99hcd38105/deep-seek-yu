@@ -1,6 +1,7 @@
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
+const { ProxyAgent } = require('undici');
 const { findNodeExecutable } = require('./node-runtime');
 
 const SETTINGS_FILE = 'official-harness-runtime.json';
@@ -51,7 +52,13 @@ function run(command, args, options = {}, onLine = () => {}) {
   });
 }
 
-function createHarnessRuntimeManager({ app }) {
+function proxyUrl(rule) {
+  const match = /(?:PROXY|HTTPS?)\s+([^;\s]+)/i.exec(String(rule || ''));
+  if (!match) return '';
+  return /^https?:\/\//i.test(match[1]) ? match[1] : `http://${match[1]}`;
+}
+
+function createHarnessRuntimeManager({ app, resolveProxy = async () => '' }) {
   const appRoot = () => app.getAppPath();
   const settingsPath = () => path.join(app.getPath('userData'), SETTINGS_FILE);
   const runtimeRoot = () => path.join(app.getPath('userData'), 'official-harness-runtimes');
@@ -91,8 +98,10 @@ function createHarnessRuntimeManager({ app }) {
   async function versions() {
     const local = { bundled: bundledVersion(), active: active().version, activeMode: active().mode };
     try {
+      const proxy = proxyUrl(await resolveProxy(REGISTRY_URL));
       const response = await fetch(REGISTRY_URL, {
-        headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(8000),
+        headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(30000),
+        ...(proxy ? { dispatcher: new ProxyAgent(proxy) } : {}),
       });
       if (!response.ok) throw new Error(`官方 npm 版本目录返回 ${response.status}`);
       const registry = await response.json();

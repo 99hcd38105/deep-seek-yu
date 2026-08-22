@@ -59,7 +59,7 @@ function normalizeSettings(value = {}) {
     showStatus: value.showStatus !== false,
     showChatPanel: value.showChatPanel !== false,
     backgroundOnClose: value.backgroundOnClose !== false,
-    size: Math.round(clamp(value.size ?? 300, 220, 420) / 10) * 10,
+    size: Math.round(clamp(value.size ?? 220, 160, 360) / 10) * 10,
     opacity: clamp(value.opacity ?? 1, 0.55, 1),
     characterId: safeIdentifier(value.characterId) || 'default-maid',
     position: value.position && Number.isInteger(value.position.x) && Number.isInteger(value.position.y)
@@ -68,7 +68,7 @@ function normalizeSettings(value = {}) {
   };
 }
 
-function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
+function createDesktopPet({ app, mainWindow, onMenuChange = () => {}, onPluginAction = async () => ({}) }) {
   let petWindow = null;
   let settingsWindow = null;
   let settings = null;
@@ -184,6 +184,17 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
     };
   }
 
+  function updateSettings(input = {}) {
+    const current = loadSettings();
+    const next = normalizeSettings({ ...current, ...input, position: current.position });
+    if (!characters().some((item) => item.id === next.characterId)) next.characterId = 'default-maid';
+    settings = next;
+    saveSettings();
+    if (settings.enabled) createPetWindow();
+    applyWindowSettings();
+    return settingsPayload();
+  }
+
   function broadcastState() {
     if (petWindow && !petWindow.isDestroyed()) petWindow.webContents.send('desktop-pet:state', publicState());
   }
@@ -236,7 +247,7 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
     const bounds = defaultBounds();
     petWindow = new BrowserWindow({
       ...bounds,
-      title: 'deep seek yu 桌宠',
+      title: 'DeepSeek yu 桌宠',
       frame: false,
       transparent: true,
       backgroundColor: '#00000000',
@@ -289,33 +300,28 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
     onMenuChange();
   }
 
-  function openSettings() {
-    if (settingsWindow && !settingsWindow.isDestroyed()) {
-      settingsWindow.show();
-      settingsWindow.focus();
-      return;
-    }
-    settingsWindow = new BrowserWindow({
-      title: '桌宠设置',
-      width: 660,
-      height: 760,
-      minWidth: 560,
-      minHeight: 640,
-      parent: mainWindow,
-      modal: false,
-      backgroundColor: '#f8fafc',
-      autoHideMenuBar: true,
-      icon: path.join(app.getAppPath(), 'assets', 'deep-seek-yu-icon.ico'),
-      webPreferences: {
-        preload: path.join(app.getAppPath(), 'pet-preload.js'),
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: true,
-      },
-    });
-    settingsWindow.setMenu(null);
-    settingsWindow.loadFile(path.join(app.getAppPath(), 'pet-settings.html'));
-    settingsWindow.on('closed', () => { settingsWindow = null; });
+  async function openSettings() {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+    await mainWindow.webContents.executeJavaScript(`(async()=>{
+      const sleep=(ms)=>new Promise(resolve=>setTimeout(resolve,ms));
+      const text=(node)=>[node.textContent,node.getAttribute?.('aria-label'),node.getAttribute?.('title')].filter(Boolean).join(' ').trim();
+      let pluginTab=document.querySelector('#deep-seek-yu-plugin-tab');
+      if(!pluginTab){
+        const settings=[...document.querySelectorAll('button')].find(node=>/^设置$/.test(text(node))||/settings/i.test(text(node)));
+        settings?.click();
+        for(let index=0;index<30&&!pluginTab;index+=1){
+          await sleep(100);
+          const plugins=[...document.querySelectorAll('button')].find(node=>text(node).trim()==='插件');
+          plugins?.click();
+          await sleep(50);
+          pluginTab=document.querySelector('#deep-seek-yu-plugin-tab');
+        }
+      }
+      pluginTab?.click();
+      return Boolean(pluginTab);
+    })()`, true);
   }
 
   async function installHarnessBridge() {
@@ -430,6 +436,24 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
           setStatus('error', action.message || '读取图片失败');
           scheduleIdle(4500);
         }
+        if (action?.requestId) {
+          try {
+            let result;
+            if (action.type === 'desktop-pet:get-settings') result = settingsPayload();
+            else if (action.type === 'desktop-pet:save-settings') result = updateSettings(action.payload || {});
+            else if (action.type === 'desktop-pet:open-directory') {
+              fs.mkdirSync(userPetDirectory(), { recursive: true });
+              const opened = await shell.openPath(userPetDirectory());
+              if (opened) throw new Error(opened);
+              result = { ok: true };
+            } else result = await onPluginAction(action);
+            await mainWindow.webContents.executeJavaScript(
+              `window.__deepSeekYuPluginResolve?.(${JSON.stringify(action.requestId)}, ${JSON.stringify(result)}, null)`, true);
+          } catch (error) {
+            await mainWindow.webContents.executeJavaScript(
+              `window.__deepSeekYuPluginResolve?.(${JSON.stringify(action.requestId)}, null, ${JSON.stringify(String(error?.message || error).slice(0, 500))})`, true).catch(() => {});
+          }
+        }
       }
       if (current.busy) {
         clearTimeout(successTimer);
@@ -477,15 +501,7 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
       return { ok: true };
     });
     handle('desktop-pet:get-settings', () => settingsPayload());
-    handle('desktop-pet:save-settings', (input = {}) => {
-      const next = normalizeSettings({ ...loadSettings(), ...input, position: loadSettings().position });
-      if (!characters().some((item) => item.id === next.characterId)) next.characterId = 'default-maid';
-      settings = next;
-      saveSettings();
-      if (settings.enabled) createPetWindow();
-      applyWindowSettings();
-      return settingsPayload();
-    });
+    handle('desktop-pet:save-settings', updateSettings);
     handle('desktop-pet:prepare-vision', async () => {
       await localVision.prepare();
       return localVision.getState();
@@ -532,6 +548,8 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
     show: showPet,
     hide: hidePet,
     openSettings,
+    settings: settingsPayload,
+    updateSettings,
     shouldRunInBackground: () => loadSettings().backgroundOnClose,
     openDirectory: async () => {
       fs.mkdirSync(userPetDirectory(), { recursive: true });
