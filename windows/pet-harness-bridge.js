@@ -1,8 +1,6 @@
 (() => {
   if (window.__dshDesktopPetBridgeInstalled) return true;
 
-  const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
-  const supportedImages = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
   const actions = [];
 
   const visible = (element) => {
@@ -22,12 +20,6 @@
   const editors = () => [...document.querySelectorAll('textarea,[contenteditable="true"],[role="textbox"]')]
     .filter((element) => visible(element) && !element.disabled && element.getAttribute('aria-disabled') !== 'true')
     .sort((left, right) => right.getBoundingClientRect().bottom - left.getBoundingClientRect().bottom);
-
-  const editorText = (editor) => {
-    if (!editor) return '';
-    if (editor instanceof HTMLTextAreaElement || editor instanceof HTMLInputElement) return editor.value || '';
-    return editor.textContent || '';
-  };
 
   const setEditorText = (editor, text) => {
     editor.focus();
@@ -155,46 +147,6 @@
     };
   };
 
-  const captureImage = (event) => {
-    const input = event.target;
-    if (!(input instanceof HTMLInputElement) || input.type !== 'file' || !input.files?.length) return;
-    const file = input.files[0];
-    const extension = String(file.name || '').toLowerCase().match(/\.(png|jpe?g|webp|gif)$/)?.[1] || '';
-    const fallbackMime = extension === 'png' ? 'image/png'
-      : extension === 'webp' ? 'image/webp'
-        : extension === 'gif' ? 'image/gif'
-          : extension ? 'image/jpeg' : '';
-    const mime = String(file.type || '') || fallbackMime;
-    const isImage = mime.startsWith('image/') || Boolean(extension);
-    if (!isImage) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    input.value = '';
-    if (!supportedImages.has(mime)) {
-      actions.push({ type: 'bridge-error', message: '仅支持 PNG、JPG、WebP 和 GIF 图片。' });
-      return;
-    }
-    if (file.size > MAX_IMAGE_BYTES) {
-      actions.push({ type: 'bridge-error', message: '图片不能超过 10 MB。' });
-      return;
-    }
-    const question = cleanText(editorText(editors()[0]), 2000);
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const encoded = String(reader.result || '').split(',')[1] || '';
-      const action = { type: 'image-data', dataUrl: `data:${mime};base64,${encoded}`, name: file.name, question };
-      if (typeof window.__dshMobileVisionUpload === 'function') {
-        try { await window.__dshMobileVisionUpload(action); }
-        catch (error) { actions.push({ type: 'bridge-error', message: String(error?.message || error || '识图失败') }); }
-      } else {
-        actions.push(action);
-      }
-    };
-    reader.onerror = () => actions.push({ type: 'bridge-error', message: '读取图片失败，请重新选择。' });
-    reader.readAsDataURL(file);
-  };
-
-  window.addEventListener('change', captureImage, true);
   new MutationObserver(installPetEntry).observe(document.documentElement, { childList: true, subtree: true });
   installPetEntry();
   window.__dshDesktopPetBridgeInstalled = true;

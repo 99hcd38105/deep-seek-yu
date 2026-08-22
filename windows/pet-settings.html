@@ -10,7 +10,7 @@
   </style>
 </head>
 <body><main>
-  <h1>桌宠设置 <span class="beta">v1.1.0 测试版</span></h1><p class="lead">动作会随当前聊天的思考、命令执行、完成和错误状态自动切换。</p>
+  <h1>桌宠设置 <span class="beta">v1.1.0 测试2版</span></h1><p class="lead">动作会随当前聊天的思考、命令执行、完成和错误状态自动切换。</p>
   <section class="card"><h2>显示与角色</h2>
     <div class="row"><div><strong>启动客户端时显示桌宠</strong><div class="desc">关闭后可以从“桌宠”菜单再次显示</div></div><input id="enabled" class="switch" type="checkbox"></div>
     <div class="row"><div><strong>始终置顶</strong><div class="desc">让桌宠保持在其他普通窗口上方</div></div><input id="alwaysOnTop" class="switch" type="checkbox"></div>
@@ -22,7 +22,7 @@
     <div class="preview"><img id="preview" alt="桌宠预览"><div><select id="character" class="field"></select><div class="buttons"><button id="openDirectory">打开自定义桌宠目录</button><button id="refresh">刷新角色列表</button></div></div></div>
   </section>
   <section class="card"><h2>本地图片识别</h2>
-    <div class="notice">无需额外 API Key。图片只在这台电脑上处理，原图不会发给 DeepSeek 或第三方。第一次使用需下载约 270 MB 的免费模型，之后可离线识图。</div>
+    <div class="notice">本地识图现在是 Harness 内部能力，无需额外 API Key。聊天中的原图只保存在这台电脑，DeepSeek 只会收到本地生成的文字描述。第一次使用需下载约 270 MB 的免费模型，之后可离线识图。</div>
     <div class="row"><div><strong>识图模型</strong><div id="modelName" class="desc"></div></div><div class="vision-status"><span id="visionDot" class="dot"></span><strong id="visionState">正在检查</strong></div></div>
     <div class="row"><div><strong>本地模型空间</strong><div id="modelSize" class="desc">尚未下载</div></div><div class="buttons"><button id="prepareVision">下载 / 准备模型</button><button id="openModelDirectory">打开模型目录</button></div></div>
   </section>

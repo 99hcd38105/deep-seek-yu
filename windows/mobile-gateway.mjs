@@ -1,10 +1,9 @@
 import http from 'node:http';
 import net from 'node:net';
 import { timingSafeEqual } from 'node:crypto';
-import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import visionModule from './local-vision.js';
 
 const args = new Map();
 for (let index = 2; index < process.argv.length; index += 2) {
@@ -18,8 +17,6 @@ const upstreamPort = Number(args.get('--upstream-port'));
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const defaultApkPath = path.resolve(scriptDirectory, '..', 'deepseek-harness-apps', 'release', 'DeepSeek-Harness-Android.apk');
 const apkPath = args.get('--apk') || defaultApkPath;
-const modelCachePath = args.get('--model-cache');
-const proxyRule = args.get('--proxy-rule') || 'DIRECT';
 const upstreamHost = '127.0.0.1';
 
 if (!token || token.length < 24) {
@@ -37,15 +34,6 @@ if (!Number.isInteger(listenPort) || listenPort < 1024 || listenPort > 65535) {
 if (!Number.isInteger(upstreamPort) || upstreamPort < 1024 || upstreamPort > 65535) {
   throw new Error('A valid --upstream-port value is required.');
 }
-
-if (!modelCachePath || !path.isAbsolute(modelCachePath)) {
-  throw new Error('An absolute --model-cache path is required.');
-}
-
-const localVision = visionModule.createLocalVision({
-  cacheDir: modelCachePath,
-  resolveProxy: async () => proxyRule,
-});
 
 function normalizeAddress(address = '') {
   return address.startsWith('::ffff:') ? address.slice(7) : address;
@@ -103,8 +91,6 @@ function forwardedHeaders(request) {
 }
 
 const mobileCompatibilityScript = `<script id="dsh-mobile-compat">(()=>{const c=globalThis.crypto||(globalThis.crypto={});if(typeof c.randomUUID!=="function"){Object.defineProperty(c,"randomUUID",{configurable:true,value:()=>{const b=new Uint8Array(16);if(typeof c.getRandomValues==="function")c.getRandomValues(b);else for(let i=0;i<b.length;i++)b[i]=Math.floor(Math.random()*256);b[6]=(b[6]&15)|64;b[8]=(b[8]&63)|128;const h=Array.from(b,x=>x.toString(16).padStart(2,"0"));return h.slice(0,4).join("")+"-"+h.slice(4,6).join("")+"-"+h.slice(6,8).join("")+"-"+h.slice(8,10).join("")+"-"+h.slice(10).join("")}})}globalThis.__dshMobileCompat=true})();</script>`;
-const harnessBridgeSource = readFileSync(path.join(scriptDirectory, 'pet-harness-bridge.js'), 'utf8').replace(/<\/script/gi, '<\\/script');
-const mobileVisionScript = `<script id="dsh-mobile-vision">${harnessBridgeSource};(()=>{let notice;function show(text,error=false){if(!notice){notice=document.createElement('div');notice.style.cssText='position:fixed;z-index:2147483647;left:50%;top:max(14px,env(safe-area-inset-top));transform:translateX(-50%);max-width:88vw;padding:10px 14px;border-radius:12px;background:#172554;color:white;font:13px/1.4 system-ui;box-shadow:0 8px 28px #0003';document.documentElement.appendChild(notice)}notice.textContent=text;notice.style.background=error?'#991b1b':'#172554';notice.hidden=false}window.__dshMobileVisionUpload=async action=>{show('正在电脑上本地识别图片，首次使用会下载模型…');try{const response=await fetch('/__dsh/local-vision',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({dataUrl:action.dataUrl,question:action.question||''})});const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error(body.error||'本地识图失败');const combined=['用户附加了一张图片。图片已由电脑上的本地视觉模型读取，原图没有上传给你。以下是视觉模型返回的文字描述（可能是英文），请用中文继续完成用户请求：','',body.description,'','用户问题：'+(action.question||'请根据识图结果解释图片内容，并给出有用的下一步。')].join('\\n');const result=await window.__dshDesktopPetSend(combined,{requireNoImage:true});if(!result?.ok)throw new Error(result?.error||'发送到当前会话失败');show('图片已识别并发送');setTimeout(()=>{if(notice)notice.hidden=true},2200)}catch(error){show(String(error?.message||error||'本地识图失败'),true);throw error}}})();</script>`;
 
 const mobileStyle = `<style id="dsh-mobile-style">
 @media (max-width:720px){
@@ -171,8 +157,8 @@ function forwardUpstreamResponse(upstreamResponse, response) {
   upstreamResponse.on('end', () => {
     const original = Buffer.concat(chunks).toString('utf8');
     const patched = /<head(?:\s[^>]*)?>/i.test(original)
-      ? original.replace(/<head(\s[^>]*)?>/i, (match) => `${match}${mobileCompatibilityScript}${mobileVisionScript}${mobileStyle}`)
-      : `${mobileCompatibilityScript}${mobileVisionScript}${mobileStyle}${original}`;
+      ? original.replace(/<head(\s[^>]*)?>/i, (match) => `${match}${mobileCompatibilityScript}${mobileStyle}`)
+      : `${mobileCompatibilityScript}${mobileStyle}${original}`;
     const headers = { ...upstreamResponse.headers };
     delete headers['content-encoding'];
     delete headers.etag;
@@ -191,37 +177,6 @@ const server = http.createServer((request, response) => {
 
   const auth = authenticate(request);
   const requestUrl = new URL(request.url || '/', 'http://gateway.local');
-  if (requestUrl.pathname === '/__dsh/local-vision') {
-    if (!auth.cookieAccepted || request.method !== 'POST') {
-      deny(response, 401, '请使用电脑生成的手机访问链接重新进入。');
-      return;
-    }
-    const chunks = [];
-    let size = 0;
-    request.on('data', (chunk) => {
-      size += chunk.length;
-      if (size > 15 * 1024 * 1024) request.destroy();
-      else chunks.push(chunk);
-    });
-    request.on('end', async () => {
-      try {
-        const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-        const match = /^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/=]+)$/.exec(String(body?.dataUrl || ''));
-        if (!match) throw new Error('图片格式无效，仅支持 PNG、JPG、WebP 和 GIF。');
-        const image = Buffer.from(match[2], 'base64');
-        if (image.length > 10 * 1024 * 1024) throw new Error('图片不能超过 10 MB。');
-        const description = await localVision.analyze(image, match[1]);
-        const payload = JSON.stringify({ description });
-        response.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(payload), 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
-        response.end(payload);
-      } catch (error) {
-        const payload = JSON.stringify({ error: String(error?.message || error || '本地识图失败').slice(0, 500) });
-        response.writeHead(400, { 'content-type': 'application/json; charset=utf-8', 'content-length': Buffer.byteLength(payload), 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
-        response.end(payload);
-      }
-    });
-    return;
-  }
   if (requestUrl.pathname === '/download/android') {
     if (!auth.queryAccepted && !auth.cookieAccepted) {
       deny(response, 401, '请使用电脑生成的 Android 安装链接重新进入。');

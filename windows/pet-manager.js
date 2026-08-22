@@ -93,7 +93,7 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
   const userPetDirectory = () => path.join(app.getPath('userData'), 'pets');
   const builtinPetDirectory = () => path.join(app.getAppPath(), 'assets', 'pets', 'default-maid');
   const localVision = createLocalVision({
-    cacheDir: path.join(app.getPath('userData'), 'models'),
+    cacheDir: process.env.DSH_TEST_MODEL_CACHE || path.join(app.getPath('userData'), 'models'),
     resolveProxy: (url) => mainWindow.webContents.session.resolveProxy(url),
     onState: (vision) => {
       if (vision.status === 'downloading') setStatus('thinking', `首次准备识图模型… ${vision.progress}%`);
@@ -428,9 +428,6 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
         if (action?.type === 'bridge-error') {
           setStatus('error', action.message || '读取图片失败');
           scheduleIdle(4500);
-        }
-        if (action?.type === 'image-data') {
-          processImageData(action.dataUrl, action.question).catch(() => {});
         }
       }
       if (current.busy) {

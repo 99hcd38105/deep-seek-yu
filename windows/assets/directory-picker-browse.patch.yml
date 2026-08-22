@@ -3,6 +3,12 @@
   disabled: true
 
 - insert:
+    - id: local-vision
+      name: '__DSH_LOCAL_VISION_PLUGIN__'
+      config:
+        cacheDir: !!js process.env.DSH_LOCAL_VISION_CACHE
+        proxyRule: !!js process.env.DSH_LOCAL_VISION_PROXY_RULE
+
     - id: directory-picker-browse-host
       name: '@deepseek-ai/dsh-host-directory-picker-browse'
 

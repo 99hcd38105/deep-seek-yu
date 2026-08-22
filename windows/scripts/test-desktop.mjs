@@ -1,8 +1,33 @@
 import { _electron as electron } from 'playwright';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
+const testUserData = await mkdtemp(path.join(os.tmpdir(), 'dsh-desktop-test-'));
+const testModelCache = process.env.DSH_TEST_MODEL_CACHE
+  || path.join(process.env.APPDATA || os.homedir(), 'deepseek-harness-desktop', 'models');
+await mkdir(path.join(testUserData, 'dsh-home'), { recursive: true });
+await writeFile(
+  path.join(testUserData, 'dsh-home', '.credentials.yaml'),
+  'DEEPSEEK_API_KEY: "test-key-not-used"\n',
+);
 const application = process.env.DSH_TEST_EXECUTABLE
-  ? await electron.launch({ executablePath: process.env.DSH_TEST_EXECUTABLE })
-  : await electron.launch({ args: ['.'] });
+  ? await electron.launch({
+      executablePath: process.env.DSH_TEST_EXECUTABLE,
+      env: {
+        ...process.env,
+        DSH_TEST_USER_DATA: testUserData,
+        DSH_TEST_MODEL_CACHE: testModelCache,
+      },
+    })
+  : await electron.launch({
+      args: ['.'],
+      env: {
+        ...process.env,
+        DSH_TEST_USER_DATA: testUserData,
+        DSH_TEST_MODEL_CACHE: testModelCache,
+      },
+    });
 try {
   const mainWindow = await application.firstWindow();
   await mainWindow.waitForLoadState('domcontentloaded');
@@ -13,7 +38,7 @@ try {
   const settingsWindow = await application.waitForEvent('window', { timeout: 15000 });
   await settingsWindow.waitForSelector('#visionState');
   const version = await settingsWindow.locator('.beta').textContent();
-  if (version?.trim() !== 'v1.1.0 测试版') throw new Error(`Unexpected settings version: ${version}`);
+  if (version?.trim() !== 'v1.1.0 测试2版') throw new Error(`Unexpected settings version: ${version}`);
   await settingsWindow.locator('#prepareVision').click();
   await settingsWindow.locator('#visionState').filter({ hasText: '已就绪' }).waitFor({ timeout: 90000 });
   if (process.argv[2]) await settingsWindow.screenshot({ path: process.argv[2] });
@@ -51,4 +76,5 @@ try {
   process.stdout.write(`desktop test passed: ${JSON.stringify(background)}\n`);
 } finally {
   await application.close();
+  await rm(testUserData, { recursive: true, force: true });
 }

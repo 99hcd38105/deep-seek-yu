@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, Tray, clipboard, dialog, shell } = require('electron');
+const { app, BrowserWindow, Menu, Tray, clipboard, dialog, session, shell } = require('electron');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -6,6 +6,7 @@ const http = require('node:http');
 const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const { createDesktopPet } = require('./pet-manager');
 
 const MOBILE_SETTINGS_FILE = 'mobile-access.json';
@@ -23,10 +24,17 @@ let mobileSettingsCache = null;
 let quitting = false;
 let tray = null;
 
+if (process.env.DSH_TEST_USER_DATA) {
+  app.setPath('userData', path.resolve(process.env.DSH_TEST_USER_DATA));
+}
 app.setAppUserModelId('ai.deepseek.harness.desktop');
 
 function dshHome() {
   return path.join(app.getPath('userData'), 'dsh-home');
+}
+
+function localVisionCache() {
+  return process.env.DSH_TEST_MODEL_CACHE || path.join(app.getPath('userData'), 'models');
 }
 
 function credentialsPath() {
@@ -250,7 +258,14 @@ function findDshEntry() {
 }
 
 function directoryPickerPatch() {
-  return path.join(app.getAppPath(), 'assets', 'directory-picker-browse.patch.yml');
+  const templatePath = path.join(app.getAppPath(), 'assets', 'directory-picker-browse.patch.yml');
+  const pluginUrl = pathToFileURL(path.join(app.getAppPath(), 'harness-plugins', 'local-vision', 'index.js')).href;
+  const patchText = fs.readFileSync(templatePath, 'utf8').replace('__DSH_LOCAL_VISION_PLUGIN__', pluginUrl);
+  const patchPath = path.join(app.getPath('userData'), 'harness-runtime.patch.yml');
+  const temporaryPath = `${patchPath}.tmp`;
+  fs.writeFileSync(temporaryPath, patchText, { mode: 0o600 });
+  fs.renameSync(temporaryPath, patchPath);
+  return patchPath;
 }
 
 function spawnHidden(command, args, { detached = true, extraEnv = {} } = {}) {
@@ -291,9 +306,14 @@ async function ensureHarness() {
       '--port', String(harnessPort),
     ];
     if (app.isPackaged) dshArguments.unshift('--expose-internals');
+    const visionProxyRule = await session.defaultSession.resolveProxy('https://huggingface.co/');
     const child = spawnHidden(node, dshArguments, {
       detached: false,
-      extraEnv: { DSH_HOME: dshHome() },
+      extraEnv: {
+        DSH_HOME: dshHome(),
+        DSH_LOCAL_VISION_CACHE: localVisionCache(),
+        DSH_LOCAL_VISION_PROXY_RULE: visionProxyRule || 'DIRECT',
+      },
     });
     harnessProcess = child;
     child.once('error', () => {});
@@ -340,7 +360,6 @@ async function startGateway() {
   const allowedPrefix = `${lanAddress.split('.').slice(0, 3).join('.')}.`;
   const gateway = path.join(app.getAppPath(), 'mobile-gateway.mjs');
   const apk = path.join(app.getAppPath(), 'assets', 'DeepSeek-Harness-Android.apk');
-  const proxyRule = await mainWindow.webContents.session.resolveProxy('https://huggingface.co/');
   const child = spawnHidden(node, [
     gateway,
     '--token', settings.token,
@@ -348,8 +367,6 @@ async function startGateway() {
     '--port', String(settings.port),
     '--upstream-port', String(settings.harnessPort),
     '--apk', apk,
-    '--model-cache', path.join(app.getPath('userData'), 'models'),
-    '--proxy-rule', proxyRule || 'DIRECT',
   ], { detached: false });
   gatewayProcess = child;
   child.once('error', () => {});
