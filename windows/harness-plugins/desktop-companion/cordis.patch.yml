@@ -1,0 +1,5 @@
+- insert:
+    - id: desktop-companion
+      name: '@deep-seek-yu/desktop-companion'
+      config:
+        enabled: true

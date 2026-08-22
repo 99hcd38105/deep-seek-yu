@@ -2,12 +2,17 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const root = process.argv[2]
+  ? path.resolve(process.argv[2])
+  : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const HOST_MARKER = 'deepseek-harness-local-vision-host-v1';
 const ADAPTER_MARKER = 'deepseek-harness-local-vision-adapter-v1';
 const TYPES_MARKER = 'deepseek-harness-local-vision-types-v1';
+const LLM_CORE_MARKER = 'deepseek-harness-local-vision-projection-v1';
 const BRAND_SIDEBAR_MARKER = 'deep-seek-yu-sidebar-brand-v1';
 const BRAND_RUNTIME_MARKER = 'deep-seek-yu-runtime-brand-v1';
+const BRAND_OFFICIAL_MARKER = 'deep-seek-yu-official-brand-v1';
+const BRAND_DOCUMENT_MARKER = 'deep-seek-yu-document-title-v1';
 
 function replaceOnce(source, before, after, target) {
   const first = source.indexOf(before);
@@ -46,42 +51,37 @@ patchFile(
     );
     source = replaceOnce(
       source,
-      `\tfor (const image of images) await ctx.attachments.validateImage({
-\t\tdata: image.data,
-\t\tmediaType: image.part.mediaType,
-\t\t...image.part.name === void 0 ? {} : { name: image.part.name }
-\t});
-\tconst blocks = [];`,
-      `\tfor (const image of images) await ctx.attachments.validateImage({
-\t\tdata: image.data,
-\t\tmediaType: image.part.mediaType,
-\t\t...image.part.name === void 0 ? {} : { name: image.part.name }
-\t});
-\tconst fallbackDescriptions = new Map();
+      `\tconst refs = await admitEncodedImages(ctx.attachments, content.filter((part) => part.type === "image"));
+\tlet next = 0;
+\treturn content.map((part) => part.type === "text" ? {
+\t\ttype: "text",
+\t\ttext: part.text
+\t} : {
+\t\ttype: "image",
+\t\tattachment: refs[next++]
+\t});`,
+      `\tconst images = content.filter((part) => part.type === "image");
+\tconst refs = await admitEncodedImages(ctx.attachments, images);
+\tconst fallbackDescriptions = [];
 \tif (imageFallback !== void 0) {
 \t\tconst prompt = content.filter((part) => part.type === "text").map((part) => part.text).join("\\n").trim();
-\t\tfor (const image of images) fallbackDescriptions.set(image, await imageFallback.describe({
-\t\t\tdata: image.data,
-\t\t\tmediaType: image.part.mediaType,
+\t\tfor (const image of images) fallbackDescriptions.push(await imageFallback.describe({
+\t\t\tdata: Buffer.from(image.data, "base64"),
+\t\t\tmediaType: image.mediaType,
 \t\t\tprompt
 \t\t}));
 \t}
-\tconst blocks = [];`,
+\tlet next = 0;
+\treturn content.map((part) => {
+\t\tif (part.type === "text") return { type: "text", text: part.text };
+\t\tconst index = next++;
+\t\treturn {
+\t\t\ttype: "image",
+\t\t\tattachment: refs[index],
+\t\t\t...fallbackDescriptions[index] === void 0 ? {} : { fallbackText: fallbackDescriptions[index] }
+\t\t};
+\t});`,
       'local description generation',
-    );
-    source = replaceOnce(
-      source,
-      `\t\tblocks.push({
-\t\t\ttype: "image",
-\t\t\tattachment
-\t\t});`,
-      `\t\tconst fallbackText = fallbackDescriptions.get(item);
-\t\tblocks.push({
-\t\t\ttype: "image",
-\t\t\tattachment,
-\t\t\t...fallbackText === void 0 ? {} : { fallbackText }
-\t\t});`,
-      'durable fallback text',
     );
     source = replaceOnce(
       source,
@@ -128,18 +128,27 @@ patchFile(
   BRAND_SIDEBAR_MARKER,
   source => replaceOnce(
     source,
-    'children: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.BrandWordmark, {})',
-    `children: (0, react_jsx_runtime.jsx)("span", {
-\t\t\t\t\t\t\tstyle: {
-\t\t\t\t\t\t\t\tfontSize: 17,
-\t\t\t\t\t\t\t\tfontWeight: 750,
-\t\t\t\t\t\t\t\tletterSpacing: "-0.03em",
-\t\t\t\t\t\t\t\twhiteSpace: "nowrap"
-\t\t\t\t\t\t\t},
-\t\t\t\t\t\t\tchildren: "deep seek yu"
-\t\t\t\t\t\t})`,
+    'children: "DSH Local Build"',
+    'children: "deep seek yu"',
     'Harness sidebar brand',
   ),
+);
+
+patchFile(
+  'node_modules/@deepseek-ai/dsh-client-ui-brand-official/lib/client.js',
+  BRAND_OFFICIAL_MARKER,
+  source => replaceOnce(
+    source,
+    'return (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.BrandWordmark, { includeMark: false });',
+    'return (0, react_jsx_runtime.jsx)("span", { style: { fontSize: 17, fontWeight: 750, whiteSpace: "nowrap" }, children: "deep seek yu" });',
+    'Harness official brand slot',
+  ),
+);
+
+patchFile(
+  'node_modules/@deepseek-ai/dsh-client-ui-renderer/lib/client.js',
+  BRAND_DOCUMENT_MARKER,
+  source => replaceOnce(source, 'const productTitle = "DeepSeek Harness";', 'const productTitle = "deep seek yu";', 'Harness live document title'),
 );
 
 patchFile(
@@ -198,8 +207,67 @@ patchFile(
 \t\t}
 \t\tif (block.type === "tool-result") assertTextOnly(block.content);
 \t}
+}
+function contentNeedsNativeImage(blocks) {
+\tfor (const block of blocks) {
+\t\tif (block.type === "image" && (typeof block.fallbackText !== "string" || block.fallbackText.trim() === "")) return true;
+\t\tif (block.type === "tool-result" && contentNeedsNativeImage(block.content)) return true;
+\t}
+\treturn false;
 }`,
       'DeepSeek image assertion',
+    );
+    source = replaceOnce(
+      source,
+      'const hasImages = options.messages.some((message) => contentHasImage(message.content));',
+      'const hasImages = options.messages.some((message) => contentNeedsNativeImage(message.content));',
+      'DeepSeek native image detection',
+    );
+    return source;
+  },
+);
+
+patchFile(
+  'node_modules/@deepseek-ai/dsh-llm/lib/index.js',
+  LLM_CORE_MARKER,
+  (initial) => {
+    let source = replaceOnce(
+      initial,
+      `function textOnlyImageText(ref) {
+\treturn \`[image omitted because this model accepts text only; attachment sha256:\${String(ref.attachmentId).slice(7, 15)}]\`;
+}`,
+      `function textOnlyImageText(ref) {
+\treturn \`[image omitted because this model accepts text only; attachment sha256:\${String(ref.attachmentId).slice(7, 15)}]\`;
+}
+function localImageFallbackText(block) {
+\tif (typeof block.fallbackText !== "string" || block.fallbackText.trim() === "") return void 0;
+\treturn \`<local_image_description>\\n\${block.fallbackText.trim()}\\n</local_image_description>\`;
+}`,
+      'local image fallback projection helper',
+    );
+    source = replaceOnce(
+      source,
+      `\t\t\tnext.push({
+\t\t\t\ttype: "text",
+\t\t\t\ttext: OFFLOADED_IMAGE_TEXT
+\t\t\t});`,
+      `\t\t\tnext.push({
+\t\t\t\ttype: "text",
+\t\t\t\ttext: localImageFallbackText(block) ?? OFFLOADED_IMAGE_TEXT
+\t\t\t});`,
+      'request image fallback projection',
+    );
+    source = replaceOnce(
+      source,
+      `\t\t\tnext.push({
+\t\t\t\ttype: "text",
+\t\t\t\ttext: textOnlyImageText(block.attachment)
+\t\t\t});`,
+      `\t\t\tnext.push({
+\t\t\t\ttype: "text",
+\t\t\t\ttext: localImageFallbackText(block) ?? textOnlyImageText(block.attachment)
+\t\t\t});`,
+      'text-only image fallback projection',
     );
     return source;
   },

@@ -9,6 +9,16 @@
         cacheDir: !!js process.env.DSH_LOCAL_VISION_CACHE
         proxyRule: !!js process.env.DSH_LOCAL_VISION_PROXY_RULE
 
+    - id: desktop-companion
+      name: '__DSH_DESKTOP_COMPANION_PLUGIN__'
+      config:
+        enabled: true
+
+    - id: account-status
+      name: '__DSH_ACCOUNT_STATUS_PLUGIN__'
+      config:
+        enabled: true
+
     - id: directory-picker-browse-host
       name: '@deepseek-ai/dsh-host-directory-picker-browse'
 

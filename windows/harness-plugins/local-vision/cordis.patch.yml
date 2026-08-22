@@ -1,0 +1,6 @@
+- insert:
+    - id: local-vision
+      name: '@deep-seek-yu/local-vision'
+      config:
+        cacheDir: !!js process.env.DSH_LOCAL_VISION_CACHE
+        proxyRule: !!js process.env.DSH_LOCAL_VISION_PROXY_RULE

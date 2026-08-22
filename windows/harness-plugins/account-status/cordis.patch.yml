@@ -1,0 +1,5 @@
+- insert:
+    - id: account-status
+      name: '@deep-seek-yu/account-status'
+      config:
+        enabled: true

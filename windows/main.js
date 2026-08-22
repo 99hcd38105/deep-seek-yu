@@ -8,6 +8,8 @@ const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { createDesktopPet } = require('./pet-manager');
+const { createHarnessRuntimeManager } = require('./harness-runtime-manager');
+const { createExtensionsManager } = require('./extensions-manager');
 
 const MOBILE_SETTINGS_FILE = 'mobile-access.json';
 const MOBILE_SETTINGS_VERSION = 2;
@@ -16,6 +18,8 @@ const MOBILE_PORT_MAX = 49152;
 
 let mainWindow;
 let desktopPet = null;
+let extensionsManager = null;
+let runtimeManager = null;
 let gatewayProcess = null;
 let harnessProcess = null;
 let gatewayStarting = false;
@@ -249,6 +253,8 @@ function findNode() {
 }
 
 function findDshEntry() {
+  const selected = runtimeManager?.active().entry;
+  if (selected) return selected;
   return findFirst([
     path.join(app.getAppPath(), 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js'),
     path.join(app.getAppPath(), 'node_modules', '@deepseek-ai', 'dsh', 'dist', 'bin.js'),
@@ -259,8 +265,13 @@ function findDshEntry() {
 
 function directoryPickerPatch() {
   const templatePath = path.join(app.getAppPath(), 'assets', 'directory-picker-browse.patch.yml');
-  const pluginUrl = pathToFileURL(path.join(app.getAppPath(), 'harness-plugins', 'local-vision', 'index.js')).href;
-  const patchText = fs.readFileSync(templatePath, 'utf8').replace('__DSH_LOCAL_VISION_PLUGIN__', pluginUrl);
+  const pluginUrl = (packageName, relative) => pathToFileURL(
+    runtimeManager?.pluginEntry(packageName, relative) || path.join(app.getAppPath(), relative),
+  ).href;
+  const patchText = fs.readFileSync(templatePath, 'utf8')
+    .replace('__DSH_LOCAL_VISION_PLUGIN__', pluginUrl('@deep-seek-yu/local-vision', 'harness-plugins/local-vision/index.js'))
+    .replace('__DSH_DESKTOP_COMPANION_PLUGIN__', pluginUrl('@deep-seek-yu/desktop-companion', 'harness-plugins/desktop-companion/index.js'))
+    .replace('__DSH_ACCOUNT_STATUS_PLUGIN__', pluginUrl('@deep-seek-yu/account-status', 'harness-plugins/account-status/index.js'));
   const patchPath = path.join(app.getPath('userData'), 'harness-runtime.patch.yml');
   const temporaryPath = `${patchPath}.tmp`;
   fs.writeFileSync(temporaryPath, patchText, { mode: 0o600 });
@@ -432,6 +443,11 @@ function installMenu() {
               buttons: ['确定'],
             });
           },
+        },
+        {
+          label: '官方更新与插件市场',
+          enabled: Boolean(extensionsManager),
+          click: () => extensionsManager?.open(),
         },
         { type: 'separator' },
         { label: '退出', role: 'quit' },
@@ -650,6 +666,7 @@ if (!gotLock) {
         }
       }
       mobileSettings();
+      runtimeManager = createHarnessRuntimeManager({ app });
       await ensureHarness();
       createWindow();
       desktopPet = createDesktopPet({
@@ -662,6 +679,13 @@ if (!gotLock) {
           }
         },
       }).start();
+      extensionsManager = createExtensionsManager({
+        app,
+        mainWindow,
+        runtimeManager,
+        dshHome,
+        onRestartRequired: () => {},
+      });
       createTray();
       installMenu();
       initializing = false;
@@ -684,6 +708,8 @@ app.on('before-quit', () => {
   quitting = true;
   desktopPet?.destroy();
   desktopPet = null;
+  extensionsManager?.destroy();
+  extensionsManager = null;
   if (tray && !tray.isDestroyed()) tray.destroy();
   tray = null;
   stopGatewayNow();

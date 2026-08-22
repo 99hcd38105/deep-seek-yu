@@ -28,8 +28,11 @@ const temporary = await mkdtemp(path.join(os.tmpdir(), 'dsh-local-vision-'));
 const patchPath = path.join(temporary, 'runtime.patch.yml');
 try {
   const template = await readFile(path.join(root, 'assets', 'directory-picker-browse.patch.yml'), 'utf8');
-  const pluginUrl = pathToFileURL(path.join(root, 'harness-plugins', 'local-vision', 'index.js')).href;
-  await writeFile(patchPath, template.replace('__DSH_LOCAL_VISION_PLUGIN__', pluginUrl));
+  const pluginUrl = relative => pathToFileURL(path.join(root, 'harness-plugins', relative, 'index.js')).href;
+  await writeFile(patchPath, template
+    .replace('__DSH_LOCAL_VISION_PLUGIN__', pluginUrl('local-vision'))
+    .replace('__DSH_DESKTOP_COMPANION_PLUGIN__', pluginUrl('desktop-companion'))
+    .replace('__DSH_ACCOUNT_STATUS_PLUGIN__', pluginUrl('account-status')));
   const child = spawn(process.execPath, [
     path.join(root, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js'),
     'web', '--patch', patchPath, '--host', '127.0.0.1', '--port', '0',

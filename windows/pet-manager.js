@@ -23,8 +23,6 @@ const STATUS_TEXT = {
   error: '遇到问题了',
 };
 
-const HARNESS_BRIDGE_SCRIPT = fs.readFileSync(path.join(__dirname, 'pet-harness-bridge.js'), 'utf8');
-
 function clamp(value, minimum, maximum) {
   const number = Number(value);
   return Number.isFinite(number) ? Math.min(maximum, Math.max(minimum, number)) : minimum;
@@ -322,7 +320,10 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
 
   async function installHarnessBridge() {
     if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isLoading()) return false;
-    try { return Boolean(await mainWindow.webContents.executeJavaScript(HARNESS_BRIDGE_SCRIPT, true)); } catch { return false; }
+    try {
+      return Boolean(await mainWindow.webContents.executeJavaScript(
+        'Boolean(window.__dshDesktopPetBridgeInstalled && window.__dshDesktopPetSend && window.__dshDesktopPetSnapshot)', true));
+    } catch { return false; }
   }
 
   async function sendMessage(message, options = {}) {
@@ -330,7 +331,7 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
     if (!text) throw new Error('请输入要发送的内容。');
     if (text.length > 12000) throw new Error('消息过长，请控制在 12000 个字符以内。');
     if (!mainWindow || mainWindow.isDestroyed()) throw new Error('当前聊天窗口不可用。');
-    await installHarnessBridge();
+    if (!(await installHarnessBridge())) throw new Error('Harness 桌宠插件尚未加载，请刷新聊天页面后重试。');
     clearTimeout(successTimer);
     lastSubmitAt = Date.now();
     setStatus('thinking');
@@ -411,7 +412,7 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
     if (monitorRunning || destroyed || !mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isLoading()) return;
     monitorRunning = true;
     try {
-      await installHarnessBridge();
+      if (!(await installHarnessBridge())) return;
       const snapshot = await mainWindow.webContents.executeJavaScript(
         'window.__dshDesktopPetSnapshot && window.__dshDesktopPetSnapshot()', true);
       const current = snapshot?.status;
