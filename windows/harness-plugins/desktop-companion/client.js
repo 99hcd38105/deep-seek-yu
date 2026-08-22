@@ -211,7 +211,7 @@
     if (panel.dataset.ready === 'true') return;
     panel.dataset.ready = 'true';
     panel.innerHTML = `
-      <div class="dsy-head"><div><h3>DeepSeek yu</h3><p>${mobileClient ? '连接电脑端 Harness，设置会同步并在电脑上立即生效。' : 'Harness 内部插件功能，设置直接保存到本机。'}</p></div><span class="dsy-version">v1.1.1 正式版</span></div>
+      <div class="dsy-head"><div><h3>DeepSeek yu</h3><p>${mobileClient ? '连接电脑端 Harness，设置会同步并在电脑上立即生效。' : 'Harness 内部插件功能，设置直接保存到本机。'}</p></div><span class="dsy-version">v1.1.2 正式版</span></div>
       <div class="dsy-grid">
         <section class="dsy-card" data-card="pet"><h4>桌宠</h4><div class="dsy-muted">桌宠在电脑桌面显示 Harness 思考、命令和对话进度。</div><div class="dsy-checks"><label><input type="checkbox" data-pet="enabled"> 启用桌宠</label><label><input type="checkbox" data-pet="alwaysOnTop"> 始终置顶</label><label><input type="checkbox" data-pet="showStatus"> 显示状态</label><label><input type="checkbox" data-pet="showChatPanel"> 显示聊天框</label><label><input type="checkbox" data-pet="backgroundOnClose"> 关闭主窗口后在后台</label></div><div class="dsy-row"><label>大小 <input class="dsy-range" data-pet="size" type="range" min="160" max="360" step="10"> <span data-size-value></span></label><div class="dsy-actions"><button class="dsy-button" data-open-pets>${mobileClient ? '打开电脑桌宠目录' : '添加桌宠'}</button><button class="dsy-button primary" data-save-pet>保存</button></div></div><div class="dsy-state" data-pet-state>正在读取…</div></section>
         <section class="dsy-card" data-card="account"><h4>余额与服务状态</h4><div class="dsy-muted">API Key 只由 Harness 后端读取，不会显示在页面。</div><div data-balance class="dsy-balance">正在读取…</div><div data-account-detail class="dsy-state"></div><button class="dsy-button" data-refresh-account>刷新</button></section>
@@ -278,9 +278,9 @@
     if (panel.dataset.ready === 'true') return;
     panel.dataset.ready = 'true';
     panel.innerHTML = `
-      <div class="dsy-head"><div><h3>社区插件</h3><p>发现、验证、安装和卸载当前 web profile 的 Harness 插件。</p></div><span class="dsy-version">v1.1.1 正式版</span></div>
+      <div class="dsy-head"><div><h3>社区插件</h3><p>发现、验证、安装和卸载当前 web profile 的 Harness 插件。</p></div><span class="dsy-version">v1.1.2 正式版</span></div>
       <div class="dsy-grid">
-        <section class="dsy-card wide"><div class="dsy-row" style="margin-top:0"><div><h4>已安装插件</h4><div class="dsy-muted">“已挂载”会在重启后生效；“未激活”表示只下载了依赖，没有声明 Harness bundle。</div></div><button class="dsy-button" data-refresh-installed>刷新</button></div><div data-installed-state class="dsy-state">正在读取…</div><div data-installed-list class="dsy-market-list"></div></section>
+        <section class="dsy-card wide"><div class="dsy-row" style="margin-top:0"><div><h4>已安装插件</h4><div class="dsy-muted">插件可以启用、禁用、修复或卸载；挂载状态在重启 DeepSeek yu 后生效。</div></div><button class="dsy-button" data-refresh-installed>刷新</button></div><div data-installed-state class="dsy-state">正在读取…</div><div data-installed-list class="dsy-market-list"></div></section>
         <section class="dsy-card wide"><h4>插件市场</h4><div class="dsy-warning">聚合已验证目录、DSH Market 与 GitHub 的 dsh-plugin Topic。安装前会检查仓库根包；如果仓库是插件集合，会尝试按 README 改用真正可挂载的 npm 包。第三方插件可访问文件、命令和网络，请先查看源码。</div><div class="dsy-row"><input class="dsy-input" data-market-search placeholder="搜索插件名、仓库或标签"><div class="dsy-actions"><button class="dsy-button" data-open-topic>打开 GitHub Topic</button><button class="dsy-button primary" data-load-market>加载全部插件</button></div></div><div data-market-state class="dsy-state">点击“加载全部插件”聚合三个插件来源。</div><div data-market-list class="dsy-market-list"></div></section>
       </div>`;
     const stateText = (selector, text, error = false) => {
@@ -293,12 +293,41 @@
     let marketCounts = {};
     const renderInstalled = () => {
       panel.querySelector('[data-installed-list]').innerHTML = installed.map((item, index) => {
-        const status = item.bundle ? '<span class="dsy-badge official">已挂载</span>'
-          : item.installed ? '<span class="dsy-badge unverified">未激活</span>' : '<span class="dsy-badge unverified">安装不完整</span>';
-        const detail = item.bundle ? '重启客户端后由 Harness 加载' : '此包没有声明 dsh.bundle，不会改变 UI 或提供 Harness 工具';
-        return `<div class="dsy-plugin"><div class="dsy-plugin-head"><div><div class="dsy-plugin-title"><strong>${escapeHtml(item.name)}</strong>${status}</div><div class="dsy-muted">${escapeHtml(item.version || item.requested)} · ${escapeHtml(detail)}</div></div><button class="dsy-button" data-remove="${index}">卸载</button></div>${item.description ? `<p>${escapeHtml(item.description)}</p>` : ''}</div>`;
+        const status = item.bundle ? '<span class="dsy-badge official">已启用</span>'
+          : item.bundleCapable ? '<span class="dsy-badge">已禁用</span>'
+            : item.installed ? '<span class="dsy-badge unverified">需要修复</span>' : '<span class="dsy-badge unverified">安装不完整</span>';
+        const detail = item.bundle ? 'Harness 将在重启后加载这个 bundle'
+          : item.bundleCapable ? '插件文件仍保留，但不加入 Harness 挂载列表'
+            : '此包没有声明 dsh.bundle，不能直接启用';
+        const control = item.bundleCapable
+          ? `<button class="dsy-button" data-toggle="${index}">${item.bundle ? '禁用' : '启用'}</button>`
+          : item.repairable ? `<button class="dsy-button primary" data-repair="${index}">修复</button>` : '';
+        return `<div class="dsy-plugin"><div class="dsy-plugin-head"><div><div class="dsy-plugin-title"><strong>${escapeHtml(item.name)}</strong>${status}</div><div class="dsy-muted">${escapeHtml(item.version || item.requested)} · ${escapeHtml(detail)}</div></div><div class="dsy-actions">${control}<button class="dsy-button" data-remove="${index}">卸载</button></div></div>${item.description ? `<p>${escapeHtml(item.description)}</p>` : ''}</div>`;
       }).join('') || '<div class="dsy-muted">当前没有另外安装的社区插件。</div>';
-      stateText('[data-installed-state]', `当前 ${installed.length} 个依赖 · 已挂载 ${installed.filter((item) => item.bundle).length} 个 · 未激活 ${installed.filter((item) => !item.bundle).length} 个`);
+      stateText('[data-installed-state]', `当前 ${installed.length} 个依赖 · 已启用 ${installed.filter((item) => item.bundle).length} 个 · 已禁用 ${installed.filter((item) => item.bundleCapable && !item.bundle).length} 个 · 待修复 ${installed.filter((item) => !item.bundleCapable).length} 个`);
+      panel.querySelectorAll('[data-toggle]').forEach((button) => button.addEventListener('click', async () => {
+        const item = installed[Number(button.dataset.toggle)];
+        const enabled = !item.bundle;
+        button.disabled = true; button.textContent = enabled ? '启用中…' : '禁用中…';
+        try {
+          await request('extensions:set-plugin-enabled', { name: item.name, enabled });
+          await loadInstalled();
+          stateText('[data-installed-state]', `${item.name} 已${enabled ? '启用' : '禁用'}，请重启 DeepSeek yu。`);
+        } catch (error) { stateText('[data-installed-state]', error.message, true); }
+        finally { button.disabled = false; button.textContent = enabled ? '启用' : '禁用'; }
+      }));
+      panel.querySelectorAll('[data-repair]').forEach((button) => button.addEventListener('click', async () => {
+        const item = installed[Number(button.dataset.repair)];
+        button.disabled = true; button.textContent = '修复中…';
+        try {
+          const result = await request('extensions:repair-plugin', { name: item.name }, 600000);
+          if (!result.canceled) {
+            await loadInstalled();
+            stateText('[data-installed-state]', result.message || result.warning || '修复完成，请重启 DeepSeek yu。', Boolean(result.warning));
+          }
+        } catch (error) { stateText('[data-installed-state]', error.message, true); }
+        finally { button.disabled = false; button.textContent = '修复'; }
+      }));
       panel.querySelectorAll('[data-remove]').forEach((button) => button.addEventListener('click', async () => {
         const item = installed[Number(button.dataset.remove)];
         button.disabled = true; button.textContent = '卸载中…';

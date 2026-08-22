@@ -432,6 +432,8 @@ async function dispatchMobileControl(action) {
     case 'extensions:install-runtime':
     case 'extensions:install-plugin':
     case 'extensions:remove-plugin':
+    case 'extensions:repair-plugin':
+    case 'extensions:set-plugin-enabled':
     case 'extensions:open-source':
     case 'extensions:open-topic':
       if (!extensionsManager) throw new Error('插件管理器尚未就绪。');

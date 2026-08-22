@@ -7,7 +7,7 @@ import YAML from 'yaml';
 const require = createRequire(import.meta.url);
 const {
   addAllowedBuilds, approvalFromFailure, ensurePnpmShim, installedPlugins, normalizeRegistry,
-  recommendedInstallSpec,
+  recommendedInstallSpec, resolveCompatibleInstall, updatePluginEnabled,
 } = require('../extensions-manager');
 
 const registry = normalizeRegistry({
@@ -46,6 +46,23 @@ const recommended = recommendedInstallSpec(`
   dsh plugin --profile web add @owner/web-ui-all@latest
 `);
 if (recommended !== '@owner/web-ui-all@latest') throw new Error(`Expected npm bundle recommendation, got ${recommended}`);
+const compatibilityRequests = [];
+const compatibility = await resolveCompatibleInstall({ name: 'monorepo', repo: 'owner/monorepo' }, {
+  fetchJson: async (url) => {
+    compatibilityRequests.push(url);
+    if (url.includes('/dev/package.json')) return { name: 'monorepo', private: true };
+    throw new Error('not found');
+  },
+  fetchText: async (url) => {
+    compatibilityRequests.push(url);
+    if (url.includes('/dev/README.md')) return 'dsh plugin --profile web add @owner/web-ui-all@latest';
+    throw new Error('not found');
+  },
+});
+if (compatibility.spec !== '@owner/web-ui-all@latest' || !compatibility.adapted
+  || compatibilityRequests.some((url) => url.includes('api.github.com'))) {
+  throw new Error(`Compatibility fallback must work without GitHub API metadata: ${JSON.stringify(compatibility)}`);
+}
 
 const gitApproval = approvalFromFailure(
   'ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED\ngit-hosted package "dsh-market@1.0.0" needs to execute build scripts',
@@ -72,21 +89,34 @@ try {
   const profile = path.join(fixture, 'profile');
   mkdirSync(profile, { recursive: true });
   mkdirSync(path.join(profile, 'node_modules', '@owner', 'active'), { recursive: true });
+  mkdirSync(path.join(profile, 'node_modules', '@owner', 'disabled'), { recursive: true });
   mkdirSync(path.join(profile, 'node_modules', 'plain-library'), { recursive: true });
   writeFileSync(path.join(profile, 'package.json'), JSON.stringify({
-    dependencies: { '@owner/active': '^1.0.0', 'plain-library': 'github:owner/monorepo' },
+    dependencies: { '@owner/active': '^1.0.0', '@owner/disabled': '^1.0.0', 'plain-library': 'github:owner/monorepo' },
     dsh: { profile: { bundles: ['@owner/active'] } },
   }));
   writeFileSync(path.join(profile, 'node_modules', '@owner', 'active', 'package.json'), JSON.stringify({
     name: '@owner/active', version: '1.2.0', dsh: { bundle: { patch: './cordis.patch.yml' } },
   }));
+  writeFileSync(path.join(profile, 'node_modules', '@owner', 'disabled', 'package.json'), JSON.stringify({
+    name: '@owner/disabled', version: '1.0.0', dsh: { bundle: { patch: './cordis.patch.yml' } },
+  }));
   writeFileSync(path.join(profile, 'node_modules', 'plain-library', 'package.json'), JSON.stringify({
     name: 'plain-library', version: '0.1.0', private: true,
   }));
   const installed = installedPlugins(profile);
-  if (installed.length !== 2 || installed.find((item) => item.name === '@owner/active')?.status !== 'active'
-    || installed.find((item) => item.name === 'plain-library')?.status !== 'inactive') {
+  if (installed.length !== 3 || installed.find((item) => item.name === '@owner/active')?.status !== 'active'
+    || installed.find((item) => item.name === '@owner/disabled')?.status !== 'disabled'
+    || installed.find((item) => item.name === 'plain-library')?.status !== 'inactive'
+    || !installed.find((item) => item.name === 'plain-library')?.repairable) {
     throw new Error(`Installed plugin activation status is incorrect: ${JSON.stringify(installed)}`);
+  }
+  updatePluginEnabled(profile, '@owner/active', false);
+  updatePluginEnabled(profile, '@owner/disabled', true);
+  const toggled = installedPlugins(profile);
+  if (toggled.find((item) => item.name === '@owner/active')?.status !== 'disabled'
+    || toggled.find((item) => item.name === '@owner/disabled')?.status !== 'active') {
+    throw new Error(`Plugin enable/disable state was not persisted: ${JSON.stringify(toggled)}`);
   }
   writeFileSync(path.join(profile, 'pnpm-workspace.yaml'), 'packages:\n  - .\nnodeLinker: hoisted\n');
   addAllowedBuilds(profile, ['dsh-market@git+https://github.com/dsh-market/dsh-market.git', 'esbuild']);
@@ -97,4 +127,4 @@ try {
   if (yaml.nodeLinker !== 'hoisted') throw new Error('Existing workspace settings were not preserved.');
 } finally { rmSync(fixture, { recursive: true, force: true }); }
 
-process.stdout.write(`extensions manager test passed: registry, compatibility recommendation, installed status, pnpm shim and build approvals verified\n`);
+process.stdout.write(`extensions manager test passed: registry, API-independent compatibility, repair metadata, enable/disable state, pnpm shim and build approvals verified\n`);

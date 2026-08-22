@@ -35,6 +35,14 @@ function repositoryName(value) {
   return /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo) ? repo : '';
 }
 
+function repositoryFromDependency(value) {
+  const spec = String(value || '').trim();
+  const github = /^github:([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)/i.exec(spec)?.[1];
+  if (github) return repositoryName(github);
+  const url = /^(?:git\+)?https:\/\/github\.com\/([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)(?:\.git)?(?:#.*)?$/i.exec(spec)?.[1];
+  return repositoryName(url);
+}
+
 function installSpec(plugin) {
   const npmName = packageName(plugin.npm);
   if (npmName) return npmName;
@@ -101,6 +109,7 @@ function normalizedEntry(item) {
     status: String(item.status || 'unverified'), verified: Boolean(item.verified),
     catalogs: Array.isArray(item.catalogs) ? item.catalogs : [],
     installCommands: Array.isArray(item.installCommands) ? item.installCommands.map(String).slice(0, 8) : [],
+    defaultBranch: String(item.defaultBranch || '').slice(0, 120),
   };
   entry.sourceUrl = `https://github.com/${entry.repo}`;
   entry.installSpec = installSpec(entry);
@@ -144,6 +153,7 @@ function normalizeLive(data) {
     name: item.name, repo: item.full_name,
     description: item.description || 'GitHub dsh-plugin Topic 中新发现的仓库，尚未经过目录验证。',
     category: 'plugin', tags: item.topics, stars: item.stargazers_count,
+    defaultBranch: item.default_branch,
     status: 'live-discovery', verified: false, catalogs: ['GitHub Topic 实时发现'],
   })).filter((item) => item.repo && item.installSpec);
 }
@@ -168,6 +178,7 @@ function mergeEntries(groups) {
     next.tags = [...new Set([...next.tags, ...item.tags])].slice(0, 10);
     next.catalogs = [...new Set([...next.catalogs, ...item.catalogs])];
     next.installCommands = [...new Set([...(next.installCommands || []), ...(item.installCommands || [])])].slice(0, 8);
+    if (!next.defaultBranch && item.defaultBranch) next.defaultBranch = item.defaultBranch;
     next.installSpec = installSpec(next);
     merged.set(key, next);
   }
@@ -214,7 +225,7 @@ function cleanProcessError(value) {
     return `插件依赖包含被 pnpm 阻止的构建脚本。\n${text.split('\n').filter((line) => /ERR_PNPM|Ignored build scripts|approve-builds/i.test(line)).slice(-4).join('\n')}`.slice(0, 1500);
   }
   if (/['"]pnpm['"].*(not recognized|不是内部或外部命令)/i.test(text)) {
-    return '客户端缺少 pnpm 插件管理组件。请升级或重新安装 DeepSeek yu 1.1.1。';
+    return '客户端缺少 pnpm 插件管理组件。请升级或重新安装 DeepSeek yu 1.1.2。';
   }
   const lines = text.split('\n').filter(Boolean);
   return lines.slice(-10).join('\n').slice(0, 1500) || '插件安装失败。';
@@ -286,16 +297,68 @@ function installedPlugins(profileDir) {
   const bundles = new Set(profile.dsh?.profile?.bundles || []);
   return Object.entries(dependencies).map(([name, requested]) => {
     const manifest = readJson(path.join(profileDir, 'node_modules', ...name.split('/'), 'package.json')) || {};
-    const bundle = Boolean(manifest.dsh?.bundle?.patch && bundles.has(name));
+    const bundleCapable = Boolean(manifest.dsh?.bundle?.patch);
+    const bundle = Boolean(bundleCapable && bundles.has(name));
     const repository = typeof manifest.repository === 'string' ? manifest.repository : manifest.repository?.url;
+    const repositoryUrl = String(repository || '').replace(/^git\+/, '').replace(/\.git$/, '');
+    const homepage = String(manifest.homepage || '').replace(/\/$/, '');
+    const dependencyRepo = repositoryFromDependency(requested);
+    const sourceUrl = repositoryName(repositoryUrl) ? repositoryUrl
+      : dependencyRepo ? `https://github.com/${dependencyRepo}` : homepage;
     return {
       name, requested: String(requested), version: String(manifest.version || ''),
-      bundle, installed: Boolean(manifest.name),
-      status: !manifest.name ? 'missing' : bundle ? 'active' : 'inactive',
+      bundle, bundleCapable, enabled: bundle, installed: Boolean(manifest.name),
+      status: !manifest.name ? 'missing' : bundle ? 'active' : bundleCapable ? 'disabled' : 'inactive',
       description: String(manifest.description || ''),
-      sourceUrl: String(manifest.homepage || repository || '').replace(/^git\+/, '').replace(/\.git$/, ''),
+      sourceUrl, repairable: Boolean(repositoryName(sourceUrl)),
     };
   }).sort((left, right) => Number(right.bundle) - Number(left.bundle) || left.name.localeCompare(right.name));
+}
+
+async function resolveCompatibleInstall(plugin, { fetchJson, fetchText }) {
+  const original = installSpec(plugin || {});
+  if (!original || plugin.npm) return { spec: original, packageName: packageName(plugin.npm), adapted: false };
+  const repo = repositoryName(plugin.repo);
+  if (!repo) return { spec: original, packageName: '', adapted: false };
+
+  const branches = [...new Set([plugin.defaultBranch, 'main', 'dev', 'master'].map(String).filter(Boolean))];
+  let detectedPackage = '';
+  for (const branchName of branches) {
+    const branch = encodeURIComponent(branchName);
+    const [manifestResult, readmeResult] = await Promise.allSettled([
+      fetchJson(`https://raw.githubusercontent.com/${repo}/${branch}/package.json`, 30000),
+      fetchText(`https://raw.githubusercontent.com/${repo}/${branch}/README.md`, 30000),
+    ]);
+    const manifest = manifestResult.status === 'fulfilled' ? manifestResult.value : {};
+    detectedPackage ||= packageName(manifest.name);
+    if (manifest.dsh?.bundle?.patch) {
+      return { spec: original, packageName: packageName(manifest.name), adapted: false };
+    }
+    const readme = readmeResult.status === 'fulfilled' ? readmeResult.value : '';
+    const declared = recommendedInstallSpec(readme, plugin.installCommands);
+    if (declared && declared !== original) {
+      return {
+        spec: declared, packageName: packageNameFromSpec(declared), adapted: true,
+        reason: `仓库根包${manifest.private ? '是私有工作区' : '没有声明 dsh.bundle'}，已按 ${branchName} 分支 README 改用可挂载插件`,
+      };
+    }
+  }
+  return { spec: original, packageName: detectedPackage, adapted: false };
+}
+
+function updatePluginEnabled(profileDir, name, enabled) {
+  const plugin = installedPlugins(profileDir).find((item) => item.name === name);
+  if (!plugin) throw new Error('该插件不在当前 web profile 中。');
+  if (!plugin.bundleCapable) throw new Error('这个依赖没有声明 dsh.bundle，不能直接启用；请先使用“修复”安装真正的插件包。');
+  const manifestPath = path.join(profileDir, 'package.json');
+  const manifest = readJson(manifestPath) || {};
+  const bundles = [...(manifest.dsh?.profile?.bundles || [])];
+  const exists = bundles.includes(name);
+  if (enabled && !exists) bundles.push(name);
+  if (!enabled && exists) bundles.splice(bundles.indexOf(name), 1);
+  manifest.dsh = { ...manifest.dsh, profile: { ...manifest.dsh?.profile, bundles } };
+  atomicJson(manifestPath, manifest);
+  return { ...plugin, enabled };
 }
 
 function createExtensionsManager({ app, mainWindow, runtimeManager, dshHome, onRestartRequired }) {
@@ -325,33 +388,7 @@ function createExtensionsManager({ app, mainWindow, runtimeManager, dshHome, onR
   }
 
   async function compatibleInstall(plugin) {
-    const original = installSpec(plugin || {});
-    if (!original || plugin.npm) return { spec: original, packageName: packageName(plugin.npm), adapted: false };
-    const repo = repositoryName(plugin.repo);
-    if (!repo) return { spec: original, packageName: '', adapted: false };
-    try {
-      const metadata = await fetchJson(`https://api.github.com/repos/${repo}`, 30000);
-      const branch = encodeURIComponent(String(metadata.default_branch || 'main'));
-      const [manifestResult, readmeResult] = await Promise.allSettled([
-        fetchJson(`https://raw.githubusercontent.com/${repo}/${branch}/package.json`, 30000),
-        fetchText(`https://raw.githubusercontent.com/${repo}/${branch}/README.md`, 30000),
-      ]);
-      const manifest = manifestResult.status === 'fulfilled' ? manifestResult.value : {};
-      if (manifest.dsh?.bundle?.patch) {
-        return { spec: original, packageName: packageName(manifest.name), adapted: false };
-      }
-      const readme = readmeResult.status === 'fulfilled' ? readmeResult.value : '';
-      const declared = recommendedInstallSpec(readme, plugin.installCommands);
-      if (declared && declared !== original) {
-        return {
-          spec: declared, packageName: packageNameFromSpec(declared), adapted: true,
-          reason: `仓库根包${manifest.private ? '是私有工作区' : '没有声明 dsh.bundle'}，已按仓库 README 改用可挂载插件`,
-        };
-      }
-      return { spec: original, packageName: packageName(manifest.name), adapted: false };
-    } catch {
-      return { spec: original, packageName: '', adapted: false };
-    }
+    return resolveCompatibleInstall(plugin, { fetchJson, fetchText });
   }
 
   function pluginEnvironment() {
@@ -473,6 +510,47 @@ function createExtensionsManager({ app, mainWindow, runtimeManager, dshHome, onR
     } finally { operation = null; }
   }
 
+  function setPluginEnabled(name, enabled) {
+    if (operation) throw new Error('已有操作正在进行。');
+    const profileDir = path.join(dshHome(), 'profiles', 'web');
+    updatePluginEnabled(profileDir, name, enabled);
+    onRestartRequired();
+    return { ok: true, enabled, restartRequired: true, name };
+  }
+
+  async function repairPlugin(name) {
+    if (operation) throw new Error('已有操作正在进行。');
+    const profileDir = path.join(dshHome(), 'profiles', 'web');
+    const current = installedPlugins(profileDir).find((item) => item.name === name);
+    if (!current) throw new Error('该插件不在当前 web profile 中。');
+    if (current.bundleCapable) return setPluginEnabled(name, true);
+    const repo = repositoryName(current.sourceUrl);
+    if (!repo) throw new Error('此依赖没有可验证的 GitHub 仓库地址，无法自动寻找替代 bundle。');
+    const compatible = await compatibleInstall({ name: current.name, repo });
+    const replacement = packageNameFromSpec(compatible.spec);
+    if (!compatible.adapted || !replacement || replacement === current.name) {
+      throw new Error('仓库说明中没有找到另一个可挂载的 npm 插件包。请查看源码中的安装说明，或卸载这个未激活依赖。');
+    }
+
+    const result = await installPlugin({
+      name: replacement, npm: replacement, repo,
+      description: `用于替换未激活依赖 ${current.name}`,
+      catalogs: ['未激活插件自动修复'], status: 'compatibility-repair', verified: false,
+    });
+    if (result.canceled || !result.active) return result;
+
+    const active = runtimeManager.active();
+    operation = runDsh(app, active.entry,
+      ['plugin', '--profile', 'web', 'remove', current.name, '--reporter=append-only'], pluginEnvironment());
+    try {
+      await operation;
+      return {
+        ...result, repaired: true, removed: current.name, packageName: replacement,
+        message: `${replacement} 已挂载，旧的未激活依赖 ${current.name} 已移除。请重启 DeepSeek yu。`,
+      };
+    } finally { operation = null; }
+  }
+
   async function dispatch(action) {
     switch (action?.type) {
       case 'extensions:versions': return runtimeManager.versions();
@@ -481,6 +559,8 @@ function createExtensionsManager({ app, mainWindow, runtimeManager, dshHome, onR
       case 'extensions:install-runtime': return installRuntime(String(action.payload?.version || ''));
       case 'extensions:install-plugin': return installPlugin(action.payload?.plugin || {});
       case 'extensions:remove-plugin': return removePlugin(String(action.payload?.name || ''));
+      case 'extensions:repair-plugin': return repairPlugin(String(action.payload?.name || ''));
+      case 'extensions:set-plugin-enabled': return setPluginEnabled(String(action.payload?.name || ''), Boolean(action.payload?.enabled));
       case 'extensions:open-source': {
         const url = String(action.payload?.url || '');
         if (!/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/?$/i.test(url)) throw new Error('只允许打开 GitHub 插件仓库源码。');
@@ -500,5 +580,5 @@ function createExtensionsManager({ app, mainWindow, runtimeManager, dshHome, onR
 module.exports = {
   addAllowedBuilds, approvalFromFailure, createExtensionsManager, ensurePnpmShim,
   installSpec, installedPlugins, normalizeRegistry, normalizeLive, normalizeMarket, normalizeVerified,
-  recommendedInstallSpec,
+  recommendedInstallSpec, resolveCompatibleInstall, updatePluginEnabled,
 };

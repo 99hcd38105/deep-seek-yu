@@ -96,6 +96,7 @@ try {
   const marketPanel = settings.locator('#deep-seek-yu-market-panel');
   await marketPanel.getByText('插件市场', { exact: true }).waitFor();
   await marketPanel.getByText('已安装插件', { exact: true }).waitFor();
+  await marketPanel.getByText(/插件可以启用、禁用、修复或卸载/).waitFor();
   await marketPanel.locator('[data-installed-state]').filter({ hasNotText: '正在读取' }).waitFor({ timeout: 15000 });
   if (await pluginPanel.isVisible()) throw new Error('切换社区插件页后 DeepSeek yu 页面没有隐藏。');
 
