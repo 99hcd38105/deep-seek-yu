@@ -161,7 +161,7 @@ const mobileShellScript = `<script id="dsh-mobile-shell">(()=>{
   const closeSidebar=()=>{document.body?.classList.remove('dsy-mobile-sidebar-open');document.querySelector('#dsy-mobile-scrim')?.setAttribute('hidden','');};
   const openSidebar=()=>{document.body?.classList.add('dsy-mobile-sidebar-open');document.querySelector('#dsy-mobile-scrim')?.removeAttribute('hidden');};
   const clickSettings=()=>{closeSidebar();document.body?.classList.add('dsy-mobile-settings-open');const button=document.querySelector('.hHd-Xa_settingsArea button')||findButton(/^(设置|settings)$/i);button?.click();};
-  const openPlugin=()=>{clickSettings();setTimeout(()=>{const plugin=findButton(/^(插件|plugins?)$/i,document.querySelector('[role="dialog"]')||document);plugin?.click();setTimeout(()=>{const own=findButton(/^DeepSeek yu$/i,document.querySelector('[role="dialog"]')||document);own?.click();},180);},180);};
+  const openPlugin=()=>{clickSettings();let attempts=0;const timer=setInterval(()=>{attempts+=1;const own=document.getElementById('deep-seek-yu-settings-nav')||findButton(/^DeepSeek yu$/i,document.querySelector('.VOzbGW_panel')||document);if(own){clearInterval(timer);own.click();}else if(attempts>=50)clearInterval(timer);},100);};
   const install=()=>{
     if(!document.body||document.querySelector('#dsy-mobile-nav'))return;
     const nav=document.createElement('nav');nav.id='dsy-mobile-nav';nav.setAttribute('aria-label','手机导航');

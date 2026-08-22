@@ -123,6 +123,47 @@
     });
     addButton.insertAdjacentElement('afterend', button);
   };
+  let sidebarBalanceTimer = 0;
+  const refreshSidebarBalance = async () => {
+    const button = document.getElementById('deep-seek-yu-sidebar-balance');
+    if (!button) return;
+    const valueElement = button.querySelector('[data-sidebar-balance]');
+    try {
+      const response = await fetch('/deep-seek-yu/api/account-status', { cache: 'no-store' });
+      const value = await response.json();
+      if (!response.ok) throw new Error(value.error || `HTTP ${response.status}`);
+      const balance = value.balances?.[0];
+      valueElement.textContent = balance ? `${balance.totalBalance} ${balance.currency}` : (value.configured ? '余额暂无' : '未配置 Key');
+      button.title = `${valueElement.textContent} · 点击打开 DeepSeek yu 设置`;
+    } catch {
+      valueElement.textContent = '余额 --';
+      button.title = '余额暂不可用 · 点击打开 DeepSeek yu 设置';
+    }
+  };
+  const installSidebarBalance = () => {
+    if (mobileClient || document.getElementById('deep-seek-yu-sidebar-balance')) return;
+    const area = document.querySelector('.hHd-Xa_settingsArea');
+    const settingsButton = area?.querySelector('button');
+    if (!area || !settingsButton) return;
+    if (!document.getElementById('deep-seek-yu-sidebar-balance-style')) {
+      const style = document.createElement('style');
+      style.id = 'deep-seek-yu-sidebar-balance-style';
+      style.textContent = `.hHd-Xa_settingsArea{display:flex!important;align-items:center;gap:6px}.hHd-Xa_settingsArea .VOzbGW_trigger{width:88px!important;flex:0 0 88px!important;margin:4px 0!important}#deep-seek-yu-sidebar-balance{min-width:0;height:34px;flex:1;display:flex;align-items:center;justify-content:flex-end;gap:5px;padding:0 8px;border:0;border-radius:9px;background:transparent;color:var(--dsw-alias-label-secondary,#475569);cursor:pointer;font:600 12px/1.2 system-ui;white-space:nowrap;overflow:hidden}#deep-seek-yu-sidebar-balance:hover{background:var(--dsw-alias-interactive-bg-hover,#eef2f7);color:var(--dsw-alias-label-primary,#111827)}#deep-seek-yu-sidebar-balance span{overflow:hidden;text-overflow:ellipsis}.hHd-Xa_collapsed .hHd-Xa_settingsArea .VOzbGW_trigger{width:36px!important;flex-basis:36px!important;margin:8px 0 10px!important}.hHd-Xa_collapsed #deep-seek-yu-sidebar-balance{display:none}`;
+      document.head.append(style);
+    }
+    const button = document.createElement('button');
+    button.id = 'deep-seek-yu-sidebar-balance';
+    button.type = 'button';
+    button.setAttribute('aria-label', 'DeepSeek 余额，打开 DeepSeek yu 设置');
+    button.innerHTML = '<span data-sidebar-balance>余额…</span><span aria-hidden="true">›</span>';
+    button.addEventListener('click', () => {
+      settingsButton.click();
+      setTimeout(() => document.getElementById('deep-seek-yu-settings-nav')?.click(), 260);
+    });
+    area.append(button);
+    refreshSidebarBalance();
+    if (!sidebarBalanceTimer) sidebarBalanceTimer = window.setInterval(refreshSidebarBalance, 60000);
+  };
   window.__dshDesktopPetSend = async (text, options = {}) => {
     const editor = editors()[0];
     if (!editor) return { ok: false, error: '没有找到当前聊天输入框，请先打开一个会话。' };
@@ -162,7 +203,7 @@
     #deep-seek-yu-plugin-panel *{box-sizing:border-box}
     .dsy-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin:4px 0 16px}.dsy-head h3{font-size:18px;margin:0}.dsy-head p{margin:3px 0 0;color:var(--dsw-alias-label-tertiary,#64748b)}
     .dsy-version{flex:none;border:1px solid var(--dsw-alias-border-l2,#dbe2ea);border-radius:999px;padding:3px 9px;font-size:12px;color:var(--dsw-alias-label-secondary,#475569)}
-    .dsy-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.dsy-card{border:1px solid var(--dsw-alias-border-l2,#e2e8f0);border-radius:14px;padding:16px;background:var(--dsw-alias-bg-layer-1,#fff);min-width:0}.dsy-card.wide{grid-column:1/-1}.dsy-card h4{font-size:15px;margin:0 0 4px}.dsy-muted{color:var(--dsw-alias-label-tertiary,#64748b);font-size:12px}.dsy-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px}.dsy-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.dsy-checks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 14px;margin-top:12px}.dsy-checks label{display:flex;align-items:center;gap:7px}.dsy-button{height:34px;border:1px solid var(--dsw-alias-border-l2,#cbd5e1);border-radius:17px;padding:0 13px;background:transparent;color:inherit;cursor:pointer}.dsy-button.primary{border:0;background:var(--dsw-alias-button-primary-fill,#111827);color:var(--dsw-alias-label-primary-foreground,#fff)}.dsy-button:disabled{opacity:.5;cursor:wait}.dsy-select,.dsy-input{height:34px;border:1px solid var(--dsw-alias-border-l2,#cbd5e1);border-radius:8px;padding:0 9px;background:var(--dsw-alias-bg-layer-1,#fff);color:inherit}.dsy-input{width:100%}.dsy-range{width:150px}.dsy-state{margin-top:10px;min-height:19px;color:var(--dsw-alias-label-secondary,#475569)}.dsy-error{color:var(--dsw-alias-state-error-primary,#dc2626)}.dsy-good{color:var(--dsw-alias-state-success-primary,#16a34a)}.dsy-warning{margin-top:12px;padding:9px 11px;border-radius:9px;background:#fff7ed;color:#9a3412;font-size:12px}.dsy-market-list{display:grid;gap:8px;margin-top:10px;max-height:300px;overflow:auto}.dsy-plugin{border-top:1px solid var(--dsw-alias-border-l2,#e2e8f0);padding:10px 2px}.dsy-plugin:first-child{border-top:0}.dsy-plugin-head{display:flex;justify-content:space-between;gap:12px}.dsy-plugin strong{overflow-wrap:anywhere}.dsy-plugin p{margin:4px 0}.dsy-balance{font-size:21px;font-weight:700;margin-top:8px}
+    .dsy-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.dsy-card{border:1px solid var(--dsw-alias-border-l2,#e2e8f0);border-radius:14px;padding:16px;background:var(--dsw-alias-bg-layer-1,#fff);min-width:0}.dsy-card.wide{grid-column:1/-1}.dsy-card h4{font-size:15px;margin:0 0 4px}.dsy-muted{color:var(--dsw-alias-label-tertiary,#64748b);font-size:12px}.dsy-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px}.dsy-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.dsy-checks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 14px;margin-top:12px}.dsy-checks label{display:flex;align-items:center;gap:7px}.dsy-button{height:34px;border:1px solid var(--dsw-alias-border-l2,#cbd5e1);border-radius:17px;padding:0 13px;background:transparent;color:inherit;cursor:pointer}.dsy-button.primary{border:0;background:var(--dsw-alias-button-primary-fill,#111827);color:var(--dsw-alias-label-primary-foreground,#fff)}.dsy-button:disabled{opacity:.5;cursor:wait}.dsy-select,.dsy-input{height:34px;border:1px solid var(--dsw-alias-border-l2,#cbd5e1);border-radius:8px;padding:0 9px;background:var(--dsw-alias-bg-layer-1,#fff);color:inherit}.dsy-input{width:100%}.dsy-range{width:150px}.dsy-state{margin-top:10px;min-height:19px;color:var(--dsw-alias-label-secondary,#475569)}.dsy-error{color:var(--dsw-alias-state-error-primary,#dc2626)}.dsy-good{color:var(--dsw-alias-state-success-primary,#16a34a)}.dsy-warning{margin-top:12px;padding:9px 11px;border-radius:9px;background:#fff7ed;color:#9a3412;font-size:12px}.dsy-market-list{display:grid;gap:8px;margin-top:10px;max-height:360px;overflow:auto}.dsy-plugin{border-top:1px solid var(--dsw-alias-border-l2,#e2e8f0);padding:10px 2px}.dsy-plugin:first-child{border-top:0}.dsy-plugin-head{display:flex;justify-content:space-between;gap:12px}.dsy-plugin-title{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.dsy-plugin strong{overflow-wrap:anywhere}.dsy-plugin p{margin:4px 0}.dsy-badge{display:inline-flex;align-items:center;height:20px;border-radius:999px;padding:0 7px;background:#eef2ff;color:#3730a3;font-size:10px;font-weight:650}.dsy-badge.official{background:#e8f7ee;color:#167044}.dsy-badge.unverified{background:#fff7ed;color:#9a3412}.dsy-balance{font-size:21px;font-weight:700;margin-top:8px}
     @media(max-width:760px){.dsy-grid{grid-template-columns:1fr}.dsy-card.wide{grid-column:auto}.dsy-checks{grid-template-columns:1fr}.dsy-row{align-items:flex-start;flex-direction:column}}
   `;
 
@@ -175,7 +216,7 @@
         <section class="dsy-card" data-card="pet"><h4>桌宠</h4><div class="dsy-muted">桌宠在电脑桌面显示 Harness 思考、命令和对话进度。</div><div class="dsy-checks"><label><input type="checkbox" data-pet="enabled"> 启用桌宠</label><label><input type="checkbox" data-pet="alwaysOnTop"> 始终置顶</label><label><input type="checkbox" data-pet="showStatus"> 显示状态</label><label><input type="checkbox" data-pet="showChatPanel"> 显示聊天框</label><label><input type="checkbox" data-pet="backgroundOnClose"> 关闭主窗口后在后台</label></div><div class="dsy-row"><label>大小 <input class="dsy-range" data-pet="size" type="range" min="160" max="360" step="10"> <span data-size-value></span></label><div class="dsy-actions"><button class="dsy-button" data-open-pets>${mobileClient ? '打开电脑桌宠目录' : '添加桌宠'}</button><button class="dsy-button primary" data-save-pet>保存</button></div></div><div class="dsy-state" data-pet-state>正在读取…</div></section>
         <section class="dsy-card" data-card="account"><h4>余额与服务状态</h4><div class="dsy-muted">API Key 只由 Harness 后端读取，不会显示在页面。</div><div data-balance class="dsy-balance">正在读取…</div><div data-account-detail class="dsy-state"></div><button class="dsy-button" data-refresh-account>刷新</button></section>
         <section class="dsy-card wide" data-card="runtime"><h4>官方 Harness 更新</h4><div class="dsy-muted">只从 DeepSeek 官方 npm 命名空间下载。</div><div class="dsy-row"><div data-runtime-state>正在读取版本…</div><div class="dsy-actions"><select class="dsy-select" data-runtime-versions></select><button class="dsy-button primary" data-install-runtime>安装并切换</button></div></div></section>
-        <section class="dsy-card wide" data-card="market"><h4>社区插件市场</h4><div class="dsy-warning">非 DeepSeek 官方或认可。第三方插件可访问文件、命令和网络，安装前请查看源码。</div><div class="dsy-row"><input class="dsy-input" data-market-search placeholder="搜索插件、仓库或标签"><button class="dsy-button" data-load-market>加载市场</button></div><div data-market-state class="dsy-state">点击“加载市场”读取社区目录。</div><div data-market-list class="dsy-market-list"></div></section>
+        <section class="dsy-card wide" data-card="market"><h4>社区插件市场</h4><div class="dsy-warning">目录来自独立社区，非 DeepSeek 官方市场。现在会显示全部可安装条目，并明确标记“已验证”或“未验证”；第三方插件可访问文件、命令和网络，安装前请查看源码。</div><div class="dsy-row"><input class="dsy-input" data-market-search placeholder="搜索完整目录：插件名、仓库或标签"><button class="dsy-button" data-load-market>加载市场</button></div><div data-market-state class="dsy-state">点击“加载市场”读取完整社区目录。</div><div data-market-list class="dsy-market-list"></div></section>
       </div>`;
 
     const stateText = (selector, text, error = false) => {
@@ -234,8 +275,14 @@
     let market = [];
     const renderMarket = () => {
       const query = panel.querySelector('[data-market-search]').value.trim().toLowerCase();
-      const items = market.filter((item) => !query || [item.name, item.repo, item.description, ...(item.tags || [])].join(' ').toLowerCase().includes(query)).slice(0, 60);
-      panel.querySelector('[data-market-list]').innerHTML = items.map((item, index) => `<div class="dsy-plugin"><div class="dsy-plugin-head"><div><strong>${escapeHtml(item.name)}</strong><div class="dsy-muted">${escapeHtml(item.repo)} · ★ ${item.stars ?? '—'}</div></div><div class="dsy-actions"><button class="dsy-button" data-source="${index}">源码</button><button class="dsy-button primary" data-install="${index}">安装</button></div></div><p>${escapeHtml(item.description)}</p></div>`).join('') || '<div class="dsy-muted">没有匹配的插件。</div>';
+      const matched = market.filter((item) => !query || [item.name, item.repo, item.description, ...(item.tags || [])].join(' ').toLowerCase().includes(query));
+      const items = matched.slice(0, query ? 160 : 100);
+      panel.querySelector('[data-market-list]').innerHTML = items.map((item, index) => {
+        const badge = item.official ? '<span class="dsy-badge official">官方条目</span>'
+          : item.verified ? '<span class="dsy-badge">已验证</span>' : '<span class="dsy-badge unverified">未验证</span>';
+        return `<div class="dsy-plugin"><div class="dsy-plugin-head"><div><div class="dsy-plugin-title"><strong>${escapeHtml(item.name)}</strong>${badge}</div><div class="dsy-muted">${escapeHtml(item.repo)} · ★ ${item.stars ?? '—'}</div></div><div class="dsy-actions"><button class="dsy-button" data-source="${index}">源码</button><button class="dsy-button primary" data-install="${index}">安装</button></div></div><p>${escapeHtml(item.description)}</p></div>`;
+      }).join('') || '<div class="dsy-muted">完整目录中没有匹配的插件。</div>';
+      if (market.length) stateText('[data-market-state]', `完整目录 ${market.length} 个 · 匹配 ${matched.length} 个${items.length < matched.length ? ` · 当前显示前 ${items.length} 个，请继续输入关键词缩小范围` : ''}`);
       panel.querySelectorAll('[data-source]').forEach((button) => button.addEventListener('click', () => request('extensions:open-source', { url: items[Number(button.dataset.source)].sourceUrl })));
       panel.querySelectorAll('[data-install]').forEach((button) => button.addEventListener('click', async () => {
         button.disabled = true; button.textContent = '安装中…';
@@ -247,7 +294,7 @@
     panel.querySelector('[data-market-search]').addEventListener('input', renderMarket);
     panel.querySelector('[data-load-market]').addEventListener('click', async (event) => {
       const button = event.currentTarget; button.disabled = true; button.textContent = '加载中…';
-      try { const value = await request('extensions:registry', {}, 90000); market = value.plugins || []; stateText('[data-market-state]', `共 ${market.length} 个通过目录验证的插件${value.warning ? ` · ${value.warning}` : ''}`); renderMarket(); }
+      try { const value = await request('extensions:registry', {}, 90000); market = value.plugins || []; renderMarket(); if (value.warning) stateText('[data-market-state]', `${panel.querySelector('[data-market-state]').textContent} · ${value.warning}`); }
       catch (error) { stateText('[data-market-state]', error.message, true); }
       finally { button.disabled = false; button.textContent = '重新加载'; }
     });
@@ -255,35 +302,52 @@
   };
 
   const installSettingsPlugin = () => {
-    const heading = [...document.querySelectorAll('h1,h2,h3')].find((item) => item.textContent.trim() === '插件');
-    const section = heading?.parentElement;
-    const tablist = section?.querySelector('[role="tablist"]');
-    if (!tablist || tablist.querySelector('#deep-seek-yu-plugin-tab')) return;
+    const settingsPanel = document.querySelector('.VOzbGW_panel');
+    const navList = settingsPanel?.querySelector('.VOzbGW_navList');
+    const options = settingsPanel?.querySelector('.VOzbGW_options');
+    if (!navList || !options || navList.querySelector('#deep-seek-yu-settings-nav')) return;
     if (!document.getElementById('deep-seek-yu-plugin-style')) {
       const style = document.createElement('style'); style.id = 'deep-seek-yu-plugin-style'; style.textContent = pluginCss; document.head.append(style);
     }
-    const officialTabs = [...tablist.querySelectorAll('[role="tab"]')];
-    if (!officialTabs.length) return;
-    const tab = document.createElement('button');
-    tab.id = 'deep-seek-yu-plugin-tab'; tab.type = 'button'; tab.role = 'tab'; tab.className = officialTabs[0].className;
-    tab.textContent = 'DeepSeek yu'; tab.tabIndex = -1; tab.setAttribute('aria-selected', 'false');
+    const officialNavigation = [...navList.querySelectorAll('button')];
+    if (!officialNavigation.length) return;
+    const navigation = document.createElement('button');
+    navigation.id = 'deep-seek-yu-settings-nav';
+    navigation.type = 'button';
+    navigation.className = officialNavigation[0].className.replace(/\bVOzbGW_active\b/g, '').trim();
+    navigation.setAttribute('aria-label', 'DeepSeek yu');
+    const sourceIcon = officialNavigation.find((item) => item.textContent.trim() === '插件')?.querySelector('svg')
+      || officialNavigation[0].querySelector('svg');
+    if (sourceIcon) navigation.append(sourceIcon.cloneNode(true));
+    const labelElement = officialNavigation[0].querySelector('span')?.cloneNode(false) || document.createElement('span');
+    labelElement.textContent = 'DeepSeek yu';
+    navigation.append(labelElement);
     const panel = document.createElement('div');
-    panel.id = 'deep-seek-yu-plugin-panel'; panel.role = 'tabpanel'; panel.hidden = true;
-    section.append(panel); tablist.append(tab);
-    const officialPanels = () => [...section.querySelectorAll('[role="tabpanel"]')].filter((item) => item !== panel);
-    tab.addEventListener('click', () => {
-      officialTabs.forEach((item) => { item.setAttribute('aria-selected', 'false'); item.removeAttribute('data-active'); item.tabIndex = -1; });
-      officialPanels().forEach((item) => { item.hidden = true; item.dataset.deepSeekYuHidden = 'true'; });
-      tab.setAttribute('aria-selected', 'true'); tab.setAttribute('data-active', 'true'); tab.tabIndex = 0; panel.hidden = false; renderPluginPanel(panel);
+    panel.id = 'deep-seek-yu-plugin-panel';
+    navigation.addEventListener('click', () => {
+      officialNavigation.forEach((item) => { item.classList.remove('VOzbGW_active'); item.removeAttribute('aria-current'); });
+      navigation.classList.add('VOzbGW_active'); navigation.setAttribute('aria-current', 'true');
+      [...options.children].forEach((item) => {
+        if (item === panel) return;
+        item.hidden = true;
+        item.dataset.deepSeekYuHidden = 'true';
+      });
+      if (!panel.isConnected) options.append(panel);
+      renderPluginPanel(panel);
     });
-    officialTabs.forEach((item) => item.addEventListener('click', () => {
-      tab.setAttribute('aria-selected', 'false'); tab.removeAttribute('data-active'); tab.tabIndex = -1; panel.hidden = true;
-      officialPanels().forEach((candidate) => { if (candidate.dataset.deepSeekYuHidden) { candidate.hidden = false; delete candidate.dataset.deepSeekYuHidden; } });
+    officialNavigation.forEach((item) => item.addEventListener('click', () => {
+      navigation.classList.remove('VOzbGW_active'); navigation.removeAttribute('aria-current');
+      [...options.children].forEach((candidate) => {
+        if (candidate.dataset.deepSeekYuHidden) { candidate.hidden = false; delete candidate.dataset.deepSeekYuHidden; }
+      });
+      panel.remove();
     }));
+    navList.append(navigation);
   };
 
-  new MutationObserver(() => { installPetEntry(); installSettingsPlugin(); }).observe(document.documentElement, { childList: true, subtree: true });
+  new MutationObserver(() => { installPetEntry(); installSidebarBalance(); installSettingsPlugin(); }).observe(document.documentElement, { childList: true, subtree: true });
   installPetEntry();
+  installSidebarBalance();
   installSettingsPlugin();
   window.__dshDesktopPetBridgeInstalled = true;
 })();

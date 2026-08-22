@@ -32,21 +32,28 @@ function proxyUrl(rule) {
 }
 
 function normalizeRegistry(data, warning = '') {
+  const rejectedStatuses = new Set(['rejected', 'invalid', 'malware', 'removed']);
   return {
     updated: data.updated,
     source: REGISTRY_URL,
     warning,
     notice: '独立社区目录，非 DeepSeek 官方或认可。安装第三方插件等同于运行其代码。',
     plugins: (Array.isArray(data.plugins) ? data.plugins : [])
-      .filter((item) => !item.official && ['plugin', 'bundle'].includes(item.category) && item.status === 'verified')
+      .filter((item) => ['plugin', 'bundle'].includes(item.category)
+        && !rejectedStatuses.has(String(item.status || '').toLowerCase()))
       .map((item) => ({
         name: String(item.name || '').slice(0, 100), repo: String(item.repo || '').slice(0, 180),
         description: String(item.description || '').slice(0, 500), category: item.category,
         npm: item.npm || '', path: item.path || '', tags: Array.isArray(item.tags) ? item.tags.slice(0, 8) : [],
         stars: Number.isFinite(item.stars) ? item.stars : null, verifiedAgainst: item.verifiedAgainst || '',
+        official: Boolean(item.official), featured: Boolean(item.featured), status: String(item.status || 'unverified'),
+        verified: Boolean(item.official || item.status === 'verified'),
         sourceUrl: `https://github.com/${item.repo}`, installSpec: installSpec(item),
       })).filter((item) => item.installSpec)
-      .sort((a, b) => (b.stars || 0) - (a.stars || 0)).slice(0, 500),
+      .sort((a, b) => Number(b.official) - Number(a.official)
+        || Number(b.verified) - Number(a.verified)
+        || Number(b.featured) - Number(a.featured)
+        || (b.stars || 0) - (a.stars || 0)),
   };
 }
 
@@ -107,9 +114,11 @@ function createExtensionsManager({ app, mainWindow, runtimeManager, dshHome, onR
     const spec = installSpec(plugin || {});
     if (!spec) throw new Error('插件安装来源无效。');
     const sourceUrl = `https://github.com/${plugin.repo}`;
+    const verification = plugin.official ? '官方目录条目'
+      : plugin.verified ? '社区目录已验证' : `未验证条目（状态：${plugin.status || 'unverified'}）`;
     const choice = await dialog.showMessageBox(mainWindow, {
       type: 'warning', title: '安装第三方 Harness 插件', message: `确认安装 ${plugin.name || spec}？`,
-      detail: `来源：${sourceUrl}\n安装项：${spec}\n\n第三方插件可以访问 Harness 的文件、命令和网络能力。请先查看源码。`,
+      detail: `来源：${sourceUrl}\n安装项：${spec}\n目录状态：${verification}\n\n第三方插件可以访问 Harness 的文件、命令和网络能力。请先查看源码；未验证条目风险更高。`,
       buttons: ['取消', '查看源码', '我已了解，安装'], defaultId: 0, cancelId: 0,
     });
     if (choice.response === 1) { await shell.openExternal(sourceUrl); return { canceled: true }; }
@@ -132,7 +141,7 @@ function createExtensionsManager({ app, mainWindow, runtimeManager, dshHome, onR
       case 'extensions:open-source': {
         const url = String(action.payload?.url || '');
         if (!/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/?$/i.test(url)) {
-          throw new Error('只允许打开经过验证的 GitHub 插件源码。');
+          throw new Error('只允许打开 GitHub 插件仓库源码。');
         }
         await shell.openExternal(url);
         return { ok: true };
@@ -144,4 +153,4 @@ function createExtensionsManager({ app, mainWindow, runtimeManager, dshHome, onR
   return { dispatch, destroy() {} };
 }
 
-module.exports = { createExtensionsManager };
+module.exports = { createExtensionsManager, normalizeRegistry };

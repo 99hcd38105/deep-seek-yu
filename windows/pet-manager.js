@@ -169,6 +169,7 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {}, onPluginAc
       statusText,
       showStatus: loadSettings().showStatus,
       showChatPanel: loadSettings().showChatPanel,
+      petSize: loadSettings().size,
       visionReady: localVision.getState().cached,
       messages,
       characterId: selected?.id || '',
@@ -213,9 +214,11 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {}, onPluginAc
 
   function defaultBounds() {
     const current = loadSettings();
-    const width = current.size;
+    const width = current.showChatPanel ? Math.max(300, Math.min(460, current.size + 100)) : current.size;
     const workArea = screen.getPrimaryDisplay().workArea;
-    const desiredHeight = Math.round(current.size * (current.showChatPanel ? 1.9 : 1.28));
+    const desiredHeight = current.showChatPanel
+      ? Math.max(450, Math.round(current.size * 1.9))
+      : Math.round(current.size * 1.28);
     const height = Math.min(desiredHeight, workArea.height - 20);
     const saved = current.position;
     if (saved && saved.x >= workArea.x - width + 80 && saved.x <= workArea.x + workArea.width - 80

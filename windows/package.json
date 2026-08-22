@@ -12,6 +12,7 @@
     "test:internal-vision": "node scripts/test-harness-local-vision.mjs && node scripts/test-deepseek-local-vision-adapter.mjs",
     "test:mobile-gateway": "node scripts/test-mobile-gateway.mjs",
     "test:mobile-ui": "node scripts/test-mobile-ui.mjs",
+    "test:extensions": "node scripts/test-extensions-manager.mjs",
     "build": "electron-packager . \"DeepSeek yu\" --platform=win32 --arch=x64 --icon=assets/deep-seek-yu-icon.ico --out=dist --overwrite --prune=true --no-asar",
     "installer": "electron-builder --win nsis"
   },

@@ -58,15 +58,26 @@ try {
     await onboardingContinue.click();
     await onboardingContinue.waitFor({ state: 'hidden', timeout: 15000 }).catch(() => {});
   }
-  await mainWindow.getByRole('button', { name: '设置', exact: true }).click({ force: true });
+  const sidebarBalance = mainWindow.locator('#deep-seek-yu-sidebar-balance');
+  await sidebarBalance.waitFor({ timeout: 30000 });
+  if (!(await sidebarBalance.evaluate((element) => element.closest('.hHd-Xa_settingsArea') != null))) {
+    throw new Error('余额没有放在左侧栏设置区域。');
+  }
+  const sidebarBalanceBox = await sidebarBalance.boundingBox();
+  if (!sidebarBalanceBox || sidebarBalanceBox.width < 80) {
+    throw new Error(`左侧栏余额区域太窄或不可见：${JSON.stringify(sidebarBalanceBox)}`);
+  }
+  await mainWindow.waitForFunction(() => document.querySelector('[data-sidebar-balance]')?.textContent !== '余额…', null, { timeout: 15000 });
+  if (process.argv[4]) await mainWindow.screenshot({ path: process.argv[4] });
+  await sidebarBalance.click({ force: true });
   const settings = mainWindow.getByRole('dialog').filter({ hasText: '通用设置' }).last();
   await settings.waitFor({ timeout: 30000 });
-  const pluginsNavigation = settings.getByText('插件', { exact: true }).first();
-  await pluginsNavigation.waitFor({ timeout: 30000 });
-  await pluginsNavigation.click({ force: true });
-  const pluginTab = settings.getByRole('tab', { name: 'DeepSeek yu' });
-  await pluginTab.waitFor({ timeout: 15000 });
-  await pluginTab.click();
+  const ownNavigation = settings.getByRole('button', { name: 'DeepSeek yu', exact: true });
+  await ownNavigation.waitFor({ timeout: 30000 });
+  await ownNavigation.click();
+  if (await settings.getByRole('tab', { name: 'DeepSeek yu', exact: true }).count()) {
+    throw new Error('DeepSeek yu 不应继续显示为插件页顶部子标签。');
+  }
   const pluginPanel = settings.locator('#deep-seek-yu-plugin-panel');
   await pluginPanel.getByText('桌宠', { exact: true }).waitFor();
   await pluginPanel.getByText('余额与服务状态', { exact: true }).waitFor();
@@ -91,6 +102,12 @@ try {
   const extraWindows = application.windows().filter((window) => window !== mainWindow && !window.url().startsWith('file:'));
   if (extraWindows.length) throw new Error(`Unexpected independent plugin window: ${JSON.stringify(extraWindows.map((window) => window.url()))}`);
   if (process.argv[2]) await mainWindow.screenshot({ path: process.argv[2] });
+  if (process.argv[3]) {
+    const petPage = application.windows().find((window) => window.url().endsWith('/pet-window.html'));
+    if (!petPage) throw new Error('Pet window page was not found for visual verification.');
+    await petPage.locator('#petImage').waitFor({ state: 'visible', timeout: 15000 });
+    await petPage.screenshot({ path: process.argv[3], omitBackground: true });
+  }
   await settings.getByRole('button', { name: '关闭' }).click();
 
   if (process.env.DSH_TEST_IMAGE) {
@@ -122,7 +139,7 @@ try {
     const pet = windows.find((window) => !window.isDestroyed() && window.getTitle() === 'DeepSeek yu 桌宠');
     return { mainVisible: main?.isVisible(), petVisible: pet?.isVisible(), petBounds: pet?.getBounds() };
   });
-  if (background.mainVisible !== false || background.petVisible !== true || background.petBounds?.width !== 180) {
+  if (background.mainVisible !== false || background.petVisible !== true || background.petBounds?.width !== 300) {
     throw new Error(`Background/pet sizing behavior failed: ${JSON.stringify(background)}`);
   }
   process.stdout.write(`desktop test passed: ${JSON.stringify(background)}\n`);
