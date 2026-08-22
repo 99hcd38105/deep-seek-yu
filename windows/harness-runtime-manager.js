@@ -1,6 +1,7 @@
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
+const { findNodeExecutable } = require('./node-runtime');
 
 const SETTINGS_FILE = 'official-harness-runtime.json';
 const REGISTRY_URL = 'https://registry.npmjs.org/@deepseek-ai%2fdsh';
@@ -139,11 +140,13 @@ function createHarnessRuntimeManager({ app }) {
     });
     const pnpm = path.join(appRoot(), 'node_modules', 'pnpm', 'bin', 'pnpm.cjs');
     if (!fs.existsSync(pnpm)) throw new Error('安装包缺少内置 pnpm，请重新安装客户端。');
-    const environment = { ...process.env, ELECTRON_RUN_AS_NODE: '1' };
+    const node = findNodeExecutable(app);
+    if (!node) throw new Error('安装包缺少 Harness 私有 Node.js 运行时，请重新安装客户端。');
+    const environment = { ...process.env };
     onLine(`正在从 DeepSeek 官方 npm 安装 @deepseek-ai/dsh@${version}`);
-    await run(process.execPath, ['--expose-internals', pnpm, '--dir', target, 'install', '--prod', '--config.node-linker=hoisted'], { env: environment }, onLine);
+    await run(node, ['--expose-internals', pnpm, '--dir', target, 'install', '--prod', '--config.node-linker=hoisted'], { env: environment }, onLine);
     const patcher = path.join(appRoot(), 'scripts', 'apply-harness-core-patches.mjs');
-    await run(process.execPath, ['--expose-internals', patcher, target], { env: environment }, onLine);
+    await run(node, ['--expose-internals', patcher, target], { env: environment }, onLine);
     if (!installedEntry(version)) throw new Error('官方 Harness 已下载，但没有找到启动入口。');
     atomicJson(settingsPath(), { mode: 'installed', version });
     return { version, mode: 'installed', restartRequired: true };

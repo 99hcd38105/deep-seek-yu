@@ -7,6 +7,7 @@
   "main": "main.js",
   "scripts": {
     "postinstall": "node scripts/apply-harness-core-patches.mjs",
+    "preinstaller": "node scripts/prepare-node-runtime.mjs",
     "start": "electron .",
     "test:internal-vision": "node scripts/test-harness-local-vision.mjs && node scripts/test-deepseek-local-vision-adapter.mjs",
     "build": "electron-packager . \"deep seek yu\" --platform=win32 --arch=x64 --icon=assets/deep-seek-yu-icon.ico --out=dist --overwrite --prune=true",
@@ -38,7 +39,8 @@
     "@deepseek-ai/dsh-workflow": "0.1.1-rc.2",
     "@huggingface/transformers": "^4.2.0",
     "pnpm": "11.22.0",
-    "undici": "^7.29.0"
+    "undici": "^7.29.0",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@electron/packager": "20.3.0",
@@ -71,8 +73,10 @@
       "pet-settings.html",
       "extensions-manager.js",
       "extensions-preload.js",
-      "extensions-window.html",
-      "harness-runtime-manager.js",
+    "extensions-window.html",
+    "harness-runtime-manager.js",
+    "node-runtime.js",
+    "runtime/node.exe",
       "scripts/apply-harness-core-patches.mjs",
       "THIRD_PARTY_NOTICES.md",
       "assets/**/*",

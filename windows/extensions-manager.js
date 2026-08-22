@@ -1,6 +1,7 @@
 const { BrowserWindow, dialog, ipcMain, shell } = require('electron');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
+const { findNodeExecutable } = require('./node-runtime');
 
 const REGISTRY_URL = 'https://raw.githubusercontent.com/dshworks/awesome-dsh-plugins/main/data/plugins.json';
 
@@ -11,11 +12,13 @@ function installSpec(plugin) {
   return `github:${plugin.repo}${suffix}`;
 }
 
-function runDsh(entry, args, environment, onLine) {
+function runDsh(app, entry, args, environment, onLine) {
   return new Promise((resolve, reject) => {
     const commandArgs = appArgs(entry, args);
-    const child = spawn(process.execPath, commandArgs, {
-      env: { ...process.env, ...environment, ELECTRON_RUN_AS_NODE: '1' },
+    const node = findNodeExecutable(app);
+    if (!node) return reject(new Error('安装包缺少 Harness 私有 Node.js 运行时，请重新安装客户端。'));
+    const child = spawn(node, commandArgs, {
+      env: { ...process.env, ...environment },
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -109,7 +112,7 @@ function createExtensionsManager({ app, mainWindow, runtimeManager, dshHome, onR
       if (choice.response !== 2) return { canceled: true };
       const active = runtimeManager.active();
       const binPath = path.join(app.getAppPath(), 'node_modules', '.bin');
-      operation = runDsh(active.entry, ['plugin', '--profile', 'web', 'add', spec], {
+      operation = runDsh(app, active.entry, ['plugin', '--profile', 'web', 'add', spec], {
         DSH_HOME: dshHome(), PATH: `${binPath}${path.delimiter}${process.env.PATH || ''}`,
       }, (line) => send('extensions:progress', line));
       try {

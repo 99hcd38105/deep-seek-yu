@@ -1,5 +1,5 @@
 import { _electron as electron } from 'playwright';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -9,7 +9,7 @@ const testModelCache = process.env.DSH_TEST_MODEL_CACHE
 await mkdir(path.join(testUserData, 'dsh-home'), { recursive: true });
 await writeFile(
   path.join(testUserData, 'dsh-home', '.credentials.yaml'),
-  'DEEPSEEK_API_KEY: "test-key-not-used"\n',
+  'version: 1\nrefs:\n  DEEPSEEK_API_KEY: "older-test-key"\nDEEPSEEK_API_KEY: "test-key-not-used"\n',
 );
 const application = process.env.DSH_TEST_EXECUTABLE
   ? await electron.launch({
@@ -40,6 +40,14 @@ try {
     throw new Error(`Harness main window did not appear: ${JSON.stringify(application.windows().map((window) => window.url()))}`);
   })();
   await mainWindow.waitForLoadState('domcontentloaded');
+  const migratedCredentials = await readFile(
+    path.join(testUserData, 'dsh-home', '.credentials.yaml'),
+    'utf8',
+  );
+  if (/^DEEPSEEK_API_KEY\s*:/m.test(migratedCredentials)
+    || !/^\s{2}DEEPSEEK_API_KEY\s*:/m.test(migratedCredentials)) {
+    throw new Error('Legacy DeepSeek credential layout was not migrated.');
+  }
   try {
     await mainWindow.waitForFunction(() => window.__dshDesktopPetBridgeInstalled === true, null, { timeout: 45000 });
   } catch (error) {

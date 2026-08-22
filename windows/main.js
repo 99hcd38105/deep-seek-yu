@@ -7,9 +7,11 @@ const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
+const YAML = require('yaml');
 const { createDesktopPet } = require('./pet-manager');
 const { createHarnessRuntimeManager } = require('./harness-runtime-manager');
 const { createExtensionsManager } = require('./extensions-manager');
+const { findNodeExecutable } = require('./node-runtime');
 
 const MOBILE_SETTINGS_FILE = 'mobile-access.json';
 const MOBILE_SETTINGS_VERSION = 2;
@@ -45,10 +47,56 @@ function credentialsPath() {
   return path.join(dshHome(), '.credentials.yaml');
 }
 
+function normalizeCredentialDocument(text = '') {
+  const parsed = text.trim() ? YAML.parse(text) : {};
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('DeepSeek 凭据文件格式不正确。');
+  }
+
+  if (parsed.version === 1) {
+    const refs = parsed.refs && typeof parsed.refs === 'object' && !Array.isArray(parsed.refs)
+      ? { ...parsed.refs }
+      : {};
+    // v1.0.x once appended this key at the document root after the official
+    // runtime had already migrated the file. The root value is the newest one.
+    if (typeof parsed.DEEPSEEK_API_KEY === 'string' && parsed.DEEPSEEK_API_KEY) {
+      refs.DEEPSEEK_API_KEY = parsed.DEEPSEEK_API_KEY;
+    }
+    delete parsed.DEEPSEEK_API_KEY;
+    return { ...parsed, version: 1, refs };
+  }
+
+  const refs = {};
+  for (const [name, value] of Object.entries(parsed)) {
+    if (typeof value === 'string' && value) refs[name] = value;
+  }
+  return { version: 1, refs };
+}
+
+function writeCredentialDocument(document) {
+  const filename = credentialsPath();
+  const temporaryPath = `${filename}.tmp`;
+  fs.mkdirSync(path.dirname(filename), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(temporaryPath, YAML.stringify(document), { mode: 0o600 });
+  fs.renameSync(temporaryPath, filename);
+  try { fs.chmodSync(filename, 0o600); } catch {}
+}
+
+function migrateDeepSeekCredentials() {
+  const filename = credentialsPath();
+  let text;
+  try { text = fs.readFileSync(filename, 'utf8'); } catch { return; }
+  const parsed = YAML.parse(text);
+  const needsMigration = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+    && (parsed.version !== 1 || Object.hasOwn(parsed, 'DEEPSEEK_API_KEY'));
+  if (needsMigration) writeCredentialDocument(normalizeCredentialDocument(text));
+}
+
 function hasDeepSeekApiKey() {
   try {
-    const text = fs.readFileSync(credentialsPath(), 'utf8');
-    return /^DEEPSEEK_API_KEY\s*:\s*\S+/m.test(text);
+    const document = normalizeCredentialDocument(fs.readFileSync(credentialsPath(), 'utf8'));
+    return typeof document.refs?.DEEPSEEK_API_KEY === 'string'
+      && document.refs.DEEPSEEK_API_KEY.length > 0;
   } catch {
     return false;
   }
@@ -68,18 +116,11 @@ function normalizeDeepSeekApiKey(value) {
 function saveDeepSeekApiKey(value) {
   const apiKey = normalizeDeepSeekApiKey(value);
   const filename = credentialsPath();
-  const temporaryPath = `${filename}.tmp`;
-  fs.mkdirSync(path.dirname(filename), { recursive: true, mode: 0o700 });
   let existing = '';
   try { existing = fs.readFileSync(filename, 'utf8'); } catch {}
-  const credentialLine = `DEEPSEEK_API_KEY: ${JSON.stringify(apiKey)}`;
-  const prefix = existing.trimEnd();
-  const next = /^DEEPSEEK_API_KEY\s*:/m.test(prefix)
-    ? `${prefix.replace(/^DEEPSEEK_API_KEY\s*:.*$/m, credentialLine)}\n`
-    : `${prefix ? `${prefix}\n` : ''}${credentialLine}\n`;
-  fs.writeFileSync(temporaryPath, next, { mode: 0o600 });
-  fs.renameSync(temporaryPath, filename);
-  try { fs.chmodSync(filename, 0o600); } catch {}
+  const document = normalizeCredentialDocument(existing);
+  document.refs.DEEPSEEK_API_KEY = apiKey;
+  writeCredentialDocument(document);
 }
 
 function newMobileSettings() {
@@ -244,12 +285,7 @@ function findFirst(candidates) {
 }
 
 function findNode() {
-  if (app.isPackaged) return process.execPath;
-  return findFirst([
-    path.join(process.env.ProgramFiles || '', 'nodejs', 'node.exe'),
-    path.join(process.env.LOCALAPPDATA || '', 'Programs', 'nodejs', 'node.exe'),
-    path.join(process.env.APPDATA || '', 'npm', 'node.exe'),
-  ]) || 'node.exe';
+  return findNodeExecutable(app);
 }
 
 function findDshEntry() {
@@ -279,13 +315,15 @@ function directoryPickerPatch() {
   return patchPath;
 }
 
-function spawnHidden(command, args, { detached = true, extraEnv = {} } = {}) {
+function spawnHidden(command, args, { detached = true, extraEnv = {}, stdio = 'ignore' } = {}) {
   const environment = { ...process.env, ...extraEnv };
-  if (app.isPackaged) environment.ELECTRON_RUN_AS_NODE = '1';
+  if (app.isPackaged && path.resolve(command) === path.resolve(process.execPath)) {
+    environment.ELECTRON_RUN_AS_NODE = '1';
+  }
   const child = spawn(command, args, {
     detached,
     windowsHide: true,
-    stdio: 'ignore',
+    stdio,
     env: environment,
   });
   if (detached) child.unref();
@@ -304,6 +342,7 @@ function privateAddress() {
 async function ensureHarness() {
   const { harnessPort } = mobileSettings();
   const node = findNode();
+  if (!node) throw new Error('安装包缺少 Harness 私有 Node.js 运行时，请重新下载安装。');
   if (!(await canConnect('127.0.0.1', harnessPort))) {
     const dshEntry = findDshEntry();
     if (!dshEntry) {
@@ -320,6 +359,7 @@ async function ensureHarness() {
     const visionProxyRule = await session.defaultSession.resolveProxy('https://huggingface.co/');
     const child = spawnHidden(node, dshArguments, {
       detached: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
       extraEnv: {
         DSH_HOME: dshHome(),
         DSH_LOCAL_VISION_CACHE: localVisionCache(),
@@ -327,10 +367,42 @@ async function ensureHarness() {
       },
     });
     harnessProcess = child;
-    child.once('error', () => {});
+    let startupOutput = '';
+    const receiveStartupOutput = (chunk) => {
+      startupOutput = `${startupOutput}${chunk.toString()}`.slice(-16000);
+    };
+    child.stdout.on('data', receiveStartupOutput);
+    child.stderr.on('data', receiveStartupOutput);
     child.once('exit', () => {
       if (harnessProcess === child) harnessProcess = null;
     });
+    try {
+      await new Promise((resolve, reject) => {
+        let settled = false;
+        const complete = (callback, value) => {
+          if (settled) return;
+          settled = true;
+          callback(value);
+        };
+        waitForHttp(localUrl()).then(() => complete(resolve)).catch((error) => complete(reject, error));
+        child.once('error', (error) => complete(reject, error));
+        child.once('exit', (code) => {
+          const safeDetail = startupOutput
+            .replace(/sk-[A-Za-z0-9_-]{8,}/g, 'sk-***')
+            .split(/\r?\n/).filter(Boolean).slice(-10).join('\n');
+          complete(reject, new Error(safeDetail
+            ? `Harness 启动失败：\n${safeDetail}`
+            : `Harness 启动进程提前退出（代码 ${code ?? '未知'}）。`));
+        });
+      });
+    } catch (error) {
+      if (child.exitCode === null && !child.killed) child.kill();
+      throw error;
+    } finally {
+      child.stdout.off('data', receiveStartupOutput);
+      child.stderr.off('data', receiveStartupOutput);
+    }
+    return;
   }
   await waitForHttp(localUrl());
 }
@@ -657,6 +729,7 @@ if (!gotLock) {
 
   app.whenReady().then(async () => {
     try {
+      migrateDeepSeekCredentials();
       if (!hasDeepSeekApiKey()) {
         const saved = await requestDeepSeekApiKey();
         if (!saved) {
