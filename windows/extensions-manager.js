@@ -129,7 +129,14 @@ function createExtensionsManager({ app, mainWindow, runtimeManager, dshHome, onR
       case 'extensions:registry': return registry();
       case 'extensions:install-runtime': return installRuntime(String(action.payload?.version || ''));
       case 'extensions:install-plugin': return installPlugin(action.payload?.plugin || {});
-      case 'extensions:open-source': await shell.openExternal(String(action.payload?.url || '')); return { ok: true };
+      case 'extensions:open-source': {
+        const url = String(action.payload?.url || '');
+        if (!/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/?$/i.test(url)) {
+          throw new Error('只允许打开经过验证的 GitHub 插件源码。');
+        }
+        await shell.openExternal(url);
+        return { ok: true };
+      }
       default: throw new Error('未知的 DeepSeek yu 插件操作。');
     }
   }

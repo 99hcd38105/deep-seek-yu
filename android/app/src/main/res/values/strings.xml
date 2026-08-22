@@ -2,9 +2,24 @@
 <resources>
     <string name="app_name">DeepSeek yu</string>
     <string name="toolbar_title">DeepSeek yu</string>
-    <string name="server">服务器</string>
+    <string name="connection">连接</string>
     <string name="server_address">电脑连接地址</string>
     <string name="server_hint">粘贴电脑客户端生成的完整连接地址</string>
+    <string name="connection_help">请先在电脑客户端中点击“手机连接 → 开启手机连接”，然后粘贴生成的完整地址。连接方式和之前相同。</string>
+    <string name="connection_help_failed">电脑暂时无法访问。请确认电脑客户端仍在运行、手机连接已开启，并且手机和电脑位于同一个可信网络。</string>
+    <string name="connection_failed">连接失败</string>
+    <string name="invalid_server">请粘贴电脑生成的完整局域网连接地址</string>
+    <string name="paste_address">从剪贴板粘贴</string>
     <string name="connect">连接</string>
     <string name="cancel">取消</string>
+    <string name="retry">重新加载</string>
+    <string name="not_connected">● 尚未连接</string>
+    <string name="connecting">● 正在连接电脑…</string>
+    <string name="connected">● 已连接电脑</string>
+    <string name="disconnected">● 连接已断开</string>
+    <string name="unsupported_link">无法打开此链接</string>
+    <string name="download_not_supported">此文件暂不支持在应用内下载</string>
+    <string name="download_started">已开始下载</string>
+    <string name="download_failed">下载失败</string>
+    <string name="file_picker_failed">无法打开图片选择器</string>
 </resources>

@@ -418,6 +418,25 @@ function gatewayIsRunning() {
   return gatewayProcess !== null && gatewayProcess.exitCode === null && !gatewayProcess.killed;
 }
 
+async function dispatchMobileControl(action) {
+  const type = String(action?.type || '');
+  switch (type) {
+    case 'desktop-pet:get-settings': return desktopPet?.settings() || {};
+    case 'desktop-pet:save-settings': return desktopPet?.updateSettings(action.payload || {}) || {};
+    case 'desktop-pet:show': desktopPet?.show(); return { ok: true };
+    case 'desktop-pet:hide': desktopPet?.hide(); return { ok: true };
+    case 'desktop-pet:open-directory': await desktopPet?.openDirectory(); return { ok: true };
+    case 'extensions:versions':
+    case 'extensions:registry':
+    case 'extensions:install-runtime':
+    case 'extensions:install-plugin':
+    case 'extensions:open-source':
+      if (!extensionsManager) throw new Error('插件管理器尚未就绪。');
+      return extensionsManager.dispatch(action);
+    default: throw new Error('不允许的手机端操作。');
+  }
+}
+
 async function waitForGatewayState(expectedOpen, timeout = 10000) {
   const { port } = mobileSettings();
   const deadline = Date.now() + timeout;
@@ -451,9 +470,21 @@ async function startGateway() {
     '--port', String(settings.port),
     '--upstream-port', String(settings.harnessPort),
     '--apk', apk,
-  ], { detached: false });
+  ], { detached: false, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
   gatewayProcess = child;
   child.once('error', () => {});
+  child.on('message', async (message) => {
+    if (message?.type !== 'mobile-control' || typeof message.id !== 'string' || child.exitCode !== null) return;
+    try {
+      const result = await dispatchMobileControl(message.action);
+      if (child.connected) child.send({ type: 'mobile-control-result', id: message.id, result });
+    } catch (error) {
+      if (child.connected) child.send({
+        type: 'mobile-control-result', id: message.id,
+        error: String(error?.message || error).slice(0, 500),
+      });
+    }
+  });
   child.once('exit', () => {
     if (gatewayProcess === child) gatewayProcess = null;
     gatewayStarting = false;

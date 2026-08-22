@@ -3,7 +3,21 @@
   const actions = [];
   const pending = new Map();
   let requestSequence = 0;
-  const request = (type, payload = {}, timeout = 90000) => new Promise((resolve, reject) => {
+  const mobileClient = window.__dshMobileClient === true;
+  const requestThroughMobileGateway = async (type, payload = {}, timeout = 90000) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    try {
+      const response = await fetch('/deep-seek-yu/mobile-control', {
+        method: 'POST', credentials: 'same-origin', cache: 'no-store', signal: controller.signal,
+        headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type, payload }),
+      });
+      const value = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(value.error || `HTTP ${response.status}`);
+      return value.result;
+    } finally { clearTimeout(timer); }
+  };
+  const requestThroughDesktopBridge = (type, payload = {}, timeout = 90000) => new Promise((resolve, reject) => {
     const requestId = `deep-seek-yu-${Date.now()}-${++requestSequence}`;
     const timer = setTimeout(() => {
       pending.delete(requestId);
@@ -12,6 +26,7 @@
     pending.set(requestId, { resolve, reject, timer });
     actions.push({ type, requestId, payload });
   });
+  const request = mobileClient ? requestThroughMobileGateway : requestThroughDesktopBridge;
   window.__deepSeekYuPluginResolve = (requestId, value, error) => {
     const entry = pending.get(requestId);
     if (!entry) return;
@@ -99,10 +114,13 @@
     button.id = 'dsh-desktop-pet-entry';
     button.type = 'button';
     button.textContent = '◉';
-    button.title = '显示桌宠（Harness 插件）';
+    button.title = mobileClient ? '显示电脑桌宠（Harness 插件）' : '显示桌宠（Harness 插件）';
     button.setAttribute('aria-label', button.title);
     button.style.cssText = 'width:30px;height:30px;margin-left:4px;border:0;border-radius:9px;background:transparent;color:#64748b;font-size:18px;cursor:pointer;';
-    button.addEventListener('click', () => actions.push({ type: 'show-pet' }));
+    button.addEventListener('click', () => {
+      if (mobileClient) request('desktop-pet:show').catch(() => {});
+      else actions.push({ type: 'show-pet' });
+    });
     addButton.insertAdjacentElement('afterend', button);
   };
   window.__dshDesktopPetSend = async (text, options = {}) => {
@@ -152,9 +170,9 @@
     if (panel.dataset.ready === 'true') return;
     panel.dataset.ready = 'true';
     panel.innerHTML = `
-      <div class="dsy-head"><div><h3>DeepSeek yu</h3><p>Harness 内部插件功能，设置直接保存到本机。</p></div><span class="dsy-version">v1.1.0 正式版</span></div>
+      <div class="dsy-head"><div><h3>DeepSeek yu</h3><p>${mobileClient ? '连接电脑端 Harness，设置会同步并在电脑上立即生效。' : 'Harness 内部插件功能，设置直接保存到本机。'}</p></div><span class="dsy-version">v1.1.0 正式版</span></div>
       <div class="dsy-grid">
-        <section class="dsy-card" data-card="pet"><h4>桌宠</h4><div class="dsy-muted">桌宠会显示 Harness 思考、命令和对话进度。</div><div class="dsy-checks"><label><input type="checkbox" data-pet="enabled"> 启用桌宠</label><label><input type="checkbox" data-pet="alwaysOnTop"> 始终置顶</label><label><input type="checkbox" data-pet="showStatus"> 显示状态</label><label><input type="checkbox" data-pet="showChatPanel"> 显示聊天框</label><label><input type="checkbox" data-pet="backgroundOnClose"> 关闭主窗口后在后台</label></div><div class="dsy-row"><label>大小 <input class="dsy-range" data-pet="size" type="range" min="160" max="360" step="10"> <span data-size-value></span></label><div class="dsy-actions"><button class="dsy-button" data-open-pets>添加桌宠</button><button class="dsy-button primary" data-save-pet>保存</button></div></div><div class="dsy-state" data-pet-state>正在读取…</div></section>
+        <section class="dsy-card" data-card="pet"><h4>桌宠</h4><div class="dsy-muted">桌宠在电脑桌面显示 Harness 思考、命令和对话进度。</div><div class="dsy-checks"><label><input type="checkbox" data-pet="enabled"> 启用桌宠</label><label><input type="checkbox" data-pet="alwaysOnTop"> 始终置顶</label><label><input type="checkbox" data-pet="showStatus"> 显示状态</label><label><input type="checkbox" data-pet="showChatPanel"> 显示聊天框</label><label><input type="checkbox" data-pet="backgroundOnClose"> 关闭主窗口后在后台</label></div><div class="dsy-row"><label>大小 <input class="dsy-range" data-pet="size" type="range" min="160" max="360" step="10"> <span data-size-value></span></label><div class="dsy-actions"><button class="dsy-button" data-open-pets>${mobileClient ? '打开电脑桌宠目录' : '添加桌宠'}</button><button class="dsy-button primary" data-save-pet>保存</button></div></div><div class="dsy-state" data-pet-state>正在读取…</div></section>
         <section class="dsy-card" data-card="account"><h4>余额与服务状态</h4><div class="dsy-muted">API Key 只由 Harness 后端读取，不会显示在页面。</div><div data-balance class="dsy-balance">正在读取…</div><div data-account-detail class="dsy-state"></div><button class="dsy-button" data-refresh-account>刷新</button></section>
         <section class="dsy-card wide" data-card="runtime"><h4>官方 Harness 更新</h4><div class="dsy-muted">只从 DeepSeek 官方 npm 命名空间下载。</div><div class="dsy-row"><div data-runtime-state>正在读取版本…</div><div class="dsy-actions"><select class="dsy-select" data-runtime-versions></select><button class="dsy-button primary" data-install-runtime>安装并切换</button></div></div></section>
         <section class="dsy-card wide" data-card="market"><h4>社区插件市场</h4><div class="dsy-warning">非 DeepSeek 官方或认可。第三方插件可访问文件、命令和网络，安装前请查看源码。</div><div class="dsy-row"><input class="dsy-input" data-market-search placeholder="搜索插件、仓库或标签"><button class="dsy-button" data-load-market>加载市场</button></div><div data-market-state class="dsy-state">点击“加载市场”读取社区目录。</div><div data-market-list class="dsy-market-list"></div></section>
