@@ -6,6 +6,12 @@
 
 工作区文件夹统一使用 Harness 的应用内目录浏览器，避免打包环境中 Win32 原生目录对话框子进程异常退出，并兼容电脑端和手机端。
 
+## v1.1.1 测试版：完整插件发现与安装修复
+
+- 插件市场聚合已验证目录、[DSH Market](https://dsh.market/) 和 GitHub [`dsh-plugin` Topic](https://github.com/topics/dsh-plugin)，按仓库去重，并显示每个条目的来源和验证状态。
+- 修复安装包内 pnpm 命令入口缺失导致插件安装失败的问题，并正确解码 Windows 中文命令输出，避免错误信息乱码。
+- 对需要构建脚本的插件保持默认阻止；只有用户二次确认后，才把准确的包名写入当前 Harness profile 的 `allowBuilds` 并重试。
+
 ## v1.1.0 正式版：官方版本同步与 Harness 插件
 
 安装包内置独立 Node.js 运行时，不要求使用者另外安装开发环境。客户端会自动把旧版 DeepSeek 密钥文件迁移到官方 v1 凭据格式，密钥值保持不变且不会写入安装包或 Git。

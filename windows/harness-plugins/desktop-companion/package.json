@@ -1,6 +1,6 @@
 {
   "name": "@deep-seek-yu/desktop-companion",
-  "version": "1.1.0",
+  "version": "1.1.1-beta.1",
   "private": true,
   "type": "module",
   "main": "index.js",

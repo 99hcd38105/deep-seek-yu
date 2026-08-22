@@ -431,6 +431,7 @@ async function dispatchMobileControl(action) {
     case 'extensions:install-runtime':
     case 'extensions:install-plugin':
     case 'extensions:open-source':
+    case 'extensions:open-topic':
       if (!extensionsManager) throw new Error('插件管理器尚未就绪。');
       return extensionsManager.dispatch(action);
     default: throw new Error('不允许的手机端操作。');

@@ -163,7 +163,7 @@ public final class MainActivity extends Activity {
         settings.setTextZoom(100);
         settings.setMediaPlaybackRequiresUserGesture(true);
         if (Build.VERSION.SDK_INT >= 26) settings.setSafeBrowsingEnabled(true);
-        settings.setUserAgentString(settings.getUserAgentString() + " DeepSeekYuAndroid/1.1.0");
+        settings.setUserAgentString(settings.getUserAgentString() + " DeepSeekYuAndroid/1.1.1-beta.1");
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false);
         webView.setWebChromeClient(new HarnessChromeClient());
