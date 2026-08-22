@@ -15,7 +15,7 @@ const allowedPrefix = args.get('--allowed-prefix');
 const listenPort = Number(args.get('--port'));
 const upstreamPort = Number(args.get('--upstream-port'));
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
-const defaultApkPath = path.resolve(scriptDirectory, '..', 'deepseek-harness-apps', 'release', 'DeepSeek-Harness-Android.apk');
+const defaultApkPath = path.resolve(scriptDirectory, '..', 'deep-seek-yu', 'release', 'deep-seek-yu-Android.apk');
 const apkPath = args.get('--apk') || defaultApkPath;
 const upstreamHost = '127.0.0.1';
 
@@ -77,7 +77,7 @@ function deny(response, status, message) {
     'cache-control': 'no-store',
     'x-content-type-options': 'nosniff',
   });
-  response.end(`<!doctype html><meta name="viewport" content="width=device-width"><title>DeepSeek Harness</title><style>body{font:16px system-ui;margin:3rem auto;max-width:34rem;padding:0 1rem;color:#202124}code{background:#f3f4f6;padding:.2rem .4rem;border-radius:.35rem}</style><h1>无法访问</h1><p>${message}</p>`);
+  response.end(`<!doctype html><meta name="viewport" content="width=device-width"><title>deep seek yu</title><style>body{font:16px system-ui;margin:3rem auto;max-width:34rem;padding:0 1rem;color:#202124}code{background:#f3f4f6;padding:.2rem .4rem;border-radius:.35rem}</style><h1>无法访问</h1><p>${message}</p>`);
 }
 
 function forwardedHeaders(request) {
@@ -189,7 +189,7 @@ const server = http.createServer((request, response) => {
     response.writeHead(200, {
       'content-type': 'application/vnd.android.package-archive',
       'content-length': String(statSync(apkPath).size),
-      'content-disposition': 'attachment; filename="DeepSeek-Harness-Android.apk"',
+      'content-disposition': 'attachment; filename="deep-seek-yu-Android.apk"',
       'cache-control': 'no-store',
       'x-content-type-options': 'nosniff',
     });
@@ -252,5 +252,5 @@ server.on('upgrade', (request, socket, head) => {
 });
 
 server.listen(listenPort, '0.0.0.0', () => {
-  console.log(`DeepSeek Harness mobile gateway: http://0.0.0.0:${listenPort}`);
+  console.log(`deep seek yu mobile gateway: http://0.0.0.0:${listenPort}`);
 });

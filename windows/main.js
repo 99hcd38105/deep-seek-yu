@@ -152,7 +152,7 @@ function requestDeepSeekApiKey() {
       maximizable: false,
       backgroundColor: '#ffffff',
       autoHideMenuBar: true,
-      icon: path.join(app.getAppPath(), 'assets', 'DeepSeek-Harness-icon.ico'),
+      icon: path.join(app.getAppPath(), 'assets', 'deep-seek-yu-icon.ico'),
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
@@ -296,7 +296,7 @@ async function ensureHarness() {
   if (!(await canConnect('127.0.0.1', harnessPort))) {
     const dshEntry = findDshEntry();
     if (!dshEntry) {
-      throw new Error('没有找到 DeepSeek Harness。请先运行：npm install --global @deepseek-ai/dsh');
+      throw new Error('没有找到 deep seek yu 所需的 Harness 运行环境。请重新安装客户端。');
     }
     const dshArguments = [
       dshEntry,
@@ -359,7 +359,7 @@ async function startGateway() {
   const node = findNode();
   const allowedPrefix = `${lanAddress.split('.').slice(0, 3).join('.')}.`;
   const gateway = path.join(app.getAppPath(), 'mobile-gateway.mjs');
-  const apk = path.join(app.getAppPath(), 'assets', 'DeepSeek-Harness-Android.apk');
+  const apk = path.join(app.getAppPath(), 'assets', 'deep-seek-yu-Android.apk');
   const child = spawnHidden(node, [
     gateway,
     '--token', settings.token,
@@ -566,7 +566,7 @@ function showMainWindow() {
 function updateTrayMenu() {
   if (!tray || tray.isDestroyed()) return;
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: '打开 DeepSeek Harness', click: showMainWindow },
+    { label: '打开 deep seek yu', click: showMainWindow },
     {
       label: desktopPet?.isVisible() ? '隐藏桌宠' : '显示桌宠',
       enabled: Boolean(desktopPet),
@@ -579,8 +579,8 @@ function updateTrayMenu() {
 
 function createTray() {
   if (tray && !tray.isDestroyed()) return;
-  tray = new Tray(path.join(app.getAppPath(), 'assets', 'DeepSeek-Harness-icon.ico'));
-  tray.setToolTip('DeepSeek Harness');
+  tray = new Tray(path.join(app.getAppPath(), 'assets', 'deep-seek-yu-icon.ico'));
+  tray.setToolTip('deep seek yu');
   tray.on('click', showMainWindow);
   updateTrayMenu();
 }
@@ -588,14 +588,14 @@ function createTray() {
 function createWindow() {
   const appUrl = localUrl();
   mainWindow = new BrowserWindow({
-    title: 'DeepSeek Harness',
+    title: 'deep seek yu',
     width: 1280,
     height: 820,
     minWidth: 860,
     minHeight: 600,
     backgroundColor: '#071a46',
     autoHideMenuBar: false,
-    icon: path.join(app.getAppPath(), 'assets', 'DeepSeek-Harness-icon.ico'),
+    icon: path.join(app.getAppPath(), 'assets', 'deep-seek-yu-icon.ico'),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -668,7 +668,7 @@ if (!gotLock) {
     } catch (error) {
       await dialog.showMessageBox({
         type: 'error',
-        title: 'DeepSeek Harness 启动失败',
+        title: 'deep seek yu 启动失败',
         message: error.message,
         buttons: ['关闭'],
       });

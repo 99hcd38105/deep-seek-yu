@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">DeepSeek Harness</string>
-    <string name="toolbar_title">Harness</string>
+    <string name="app_name">deep seek yu</string>
+    <string name="toolbar_title">deep seek yu</string>
     <string name="server">服务器</string>
     <string name="server_address">电脑连接地址</string>
     <string name="server_hint">粘贴电脑客户端生成的完整连接地址</string>

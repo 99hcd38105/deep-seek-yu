@@ -1,19 +1,19 @@
 {
   "name": "deepseek-harness-desktop",
-  "version": "1.1.0-beta.2",
+  "version": "1.1.0-beta.3",
   "private": true,
-  "description": "DeepSeek Harness desktop client",
+  "description": "deep seek yu desktop client",
   "author": "Local build",
   "main": "main.js",
   "scripts": {
     "postinstall": "node scripts/apply-harness-core-patches.mjs",
     "start": "electron .",
     "test:internal-vision": "node scripts/test-harness-local-vision.mjs && node scripts/test-deepseek-local-vision-adapter.mjs",
-    "build": "electron-packager . \"DeepSeek Harness\" --platform=win32 --arch=x64 --icon=assets/DeepSeek-Harness-icon.ico --out=dist --overwrite --prune=true",
+    "build": "electron-packager . \"deep seek yu\" --platform=win32 --arch=x64 --icon=assets/deep-seek-yu-icon.ico --out=dist --overwrite --prune=true",
     "installer": "electron-builder --win nsis"
   },
   "dependencies": {
-    "@deepseek-harness/local-vision": "file:harness-plugins/local-vision",
+    "@deep-seek-yu/local-vision": "file:harness-plugins/local-vision",
     "@deepseek-ai/cordis-plugin-group": "1.0.1",
     "@deepseek-ai/dsh": "0.1.0-rc.6",
     "@deepseek-ai/dsh-anonymous-user-id": "0.1.0-rc.6",
@@ -49,7 +49,7 @@
   },
   "build": {
     "appId": "ai.deepseek.harness.desktop",
-    "productName": "DeepSeek Harness",
+    "productName": "deep seek yu",
     "asar": false,
     "npmRebuild": false,
     "compression": "normal",
@@ -71,7 +71,7 @@
       "package.json"
     ],
     "win": {
-      "icon": "assets/DeepSeek-Harness-icon.ico",
+      "icon": "assets/deep-seek-yu-icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -80,7 +80,7 @@
           ]
         }
       ],
-      "artifactName": "DeepSeek-Harness-Setup-${version}.${ext}"
+      "artifactName": "deep-seek-yu-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -89,11 +89,11 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": false,
       "createStartMenuShortcut": true,
-      "shortcutName": "DeepSeek Harness",
+      "shortcutName": "deep seek yu",
       "runAfterFinish": true,
       "deleteAppDataOnUninstall": false,
-      "installerIcon": "assets/DeepSeek-Harness-icon.ico",
-      "uninstallerIcon": "assets/DeepSeek-Harness-icon.ico"
+      "installerIcon": "assets/deep-seek-yu-icon.ico",
+      "uninstallerIcon": "assets/deep-seek-yu-icon.ico"
     }
   }
 }

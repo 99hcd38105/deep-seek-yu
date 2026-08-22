@@ -28,14 +28,14 @@ Function InstallOptionsPageCreate
     Abort
   ${EndIf}
 
-  ${NSD_CreateLabel} 0 0 100% 24u "请选择 DeepSeek Harness 的安装选项："
+  ${NSD_CreateLabel} 0 0 100% 24u "请选择 deep seek yu 的安装选项："
   Pop $0
 
   ${NSD_CreateCheckbox} 0 34u 100% 14u "创建桌面快捷方式（推荐）"
   Pop $DesktopShortcutCheckbox
   ${NSD_SetState} $DesktopShortcutCheckbox $DesktopShortcutOption
 
-  ${NSD_CreateCheckbox} 0 62u 100% 14u "开机时自动启动 DeepSeek Harness"
+  ${NSD_CreateCheckbox} 0 62u 100% 14u "开机时自动启动 deep seek yu"
   Pop $AutoStartCheckbox
   ${NSD_SetState} $AutoStartCheckbox $AutoStartOption
 
@@ -51,6 +51,11 @@ Function InstallOptionsPageLeave
 FunctionEnd
 
 !macro customInstall
+  ; 清理旧品牌名称留下的快捷方式和开机启动项，但保留应用数据。
+  Delete "$DESKTOP\DeepSeek Harness.lnk"
+  Delete "$SMPROGRAMS\DeepSeek Harness.lnk"
+  DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "DeepSeek Harness"
+
   ${If} $DesktopShortcutOption == ${BST_CHECKED}
     CreateShortCut "$newDesktopLink" "$appExe" "" "$appExe" 0 "" "" "${APP_DESCRIPTION}"
     ClearErrors
@@ -72,6 +77,9 @@ FunctionEnd
 
 !macro customUnInstall
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCT_NAME}"
+  DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "DeepSeek Harness"
+  Delete "$DESKTOP\DeepSeek Harness.lnk"
+  Delete "$SMPROGRAMS\DeepSeek Harness.lnk"
   WinShell::UninstShortcut "$oldDesktopLink"
   Delete "$oldDesktopLink"
 !macroend

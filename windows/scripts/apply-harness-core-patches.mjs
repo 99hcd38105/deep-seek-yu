@@ -6,6 +6,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const HOST_MARKER = 'deepseek-harness-local-vision-host-v1';
 const ADAPTER_MARKER = 'deepseek-harness-local-vision-adapter-v1';
 const TYPES_MARKER = 'deepseek-harness-local-vision-types-v1';
+const BRAND_SIDEBAR_MARKER = 'deep-seek-yu-sidebar-brand-v1';
+const BRAND_RUNTIME_MARKER = 'deep-seek-yu-runtime-brand-v1';
 
 function replaceOnce(source, before, after, target) {
   const first = source.indexOf(before);
@@ -22,6 +24,14 @@ function patchFile(relative, marker, transform) {
   if (source.includes(marker)) return;
   const patched = transform(source);
   writeFileSync(filename, `${patched}\n/* ${marker} */\n`, 'utf8');
+}
+
+function replaceTextFile(relative, before, after, target) {
+  const filename = path.join(root, relative);
+  const source = readFileSync(filename, 'utf8');
+  if (source.includes(after)) return;
+  const patched = replaceOnce(source, before, after, target);
+  writeFileSync(filename, patched, 'utf8');
 }
 
 patchFile(
@@ -111,6 +121,49 @@ patchFile(
     );
     return source;
   },
+);
+
+patchFile(
+  'node_modules/@deepseek-ai/dsh-client-ui-sidebar/lib/client.js',
+  BRAND_SIDEBAR_MARKER,
+  source => replaceOnce(
+    source,
+    'children: (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.BrandWordmark, {})',
+    `children: (0, react_jsx_runtime.jsx)("span", {
+\t\t\t\t\t\t\tstyle: {
+\t\t\t\t\t\t\t\tfontSize: 17,
+\t\t\t\t\t\t\t\tfontWeight: 750,
+\t\t\t\t\t\t\t\tletterSpacing: "-0.03em",
+\t\t\t\t\t\t\t\twhiteSpace: "nowrap"
+\t\t\t\t\t\t\t},
+\t\t\t\t\t\t\tchildren: "deep seek yu"
+\t\t\t\t\t\t})`,
+    'Harness sidebar brand',
+  ),
+);
+
+patchFile(
+  'node_modules/@deepseek-ai/dsh-web-app/lib/index.js',
+  BRAND_RUNTIME_MARKER,
+  (source) => {
+    const branded = source.replaceAll('DeepSeek Harness Web GUI', 'deep seek yu Web GUI');
+    if (branded === source) throw new Error('Harness runtime brand target changed.');
+    return branded;
+  },
+);
+
+replaceTextFile(
+  'node_modules/@deepseek-ai/dsh-web-frontend/dist/index.html',
+  '<title>DeepSeek Harness</title>',
+  '<title>deep seek yu</title>',
+  'Harness document title',
+);
+
+replaceTextFile(
+  'node_modules/@deepseek-ai/dsh-web-frontend/dist/manifest.webmanifest',
+  '"name": "DeepSeek Harness",\n  "short_name": "DSH"',
+  '"name": "deep seek yu",\n  "short_name": "deep seek yu"',
+  'Harness PWA manifest brand',
 );
 
 patchFile(

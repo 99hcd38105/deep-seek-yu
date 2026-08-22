@@ -1,4 +1,4 @@
-# DeepSeek Harness Windows 客户端
+# deep seek yu Windows 客户端
 
 运行 `npm run build` 生成独立的 Windows 客户端。客户端会连接本机的 Harness，并在需要时自动启动 Harness 与仅限局域网访问的手机网关。
 
@@ -6,7 +6,9 @@
 
 工作区文件夹统一使用 Harness 的应用内目录浏览器，避免打包环境中 Win32 原生目录对话框子进程异常退出，并兼容电脑端和手机端。
 
-## v1.1.0 测试2版：Harness 内部识图与后台桌宠
+## v1.1.0 测试3版：品牌统一、Harness 内部识图与后台桌宠
+
+客户端、安装包、快捷方式、窗口、托盘、桌宠和 Harness 页面统一显示为 `deep seek yu`。为了兼容旧版本，应用 ID 和数据目录保持不变，升级不会主动清空本机密钥、视觉模型或会话记录。
 
 - 桌宠是独立透明窗口，可拖动、置顶、调节大小和透明度，并随 Harness 的思考、命令执行、完成、错误切换动作。
 - 桌宠下方的面板会同步当前 Harness 会话、工具执行进度和最终回复，也可直接输入消息。
@@ -19,4 +21,4 @@
 
 从旧版升级时，已经保存的豆包/火山方舟视觉密钥文件会被删除。只有从托盘菜单完全退出后，客户端启动的 Harness 和手机网关才会一并停止。
 
-生成后的主程序位于 `dist/DeepSeek Harness-win32-x64/DeepSeek Harness.exe`。
+生成后的主程序位于 `dist/deep seek yu-win32-x64/deep seek yu.exe`。

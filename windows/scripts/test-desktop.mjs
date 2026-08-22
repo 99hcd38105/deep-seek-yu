@@ -31,6 +31,10 @@ const application = process.env.DSH_TEST_EXECUTABLE
 try {
   const mainWindow = await application.firstWindow();
   await mainWindow.waitForLoadState('domcontentloaded');
+  await mainWindow.getByText('deep seek yu', { exact: true }).first().waitFor({ timeout: 30000 });
+  if ((await mainWindow.title()).trim() !== 'deep seek yu') {
+    throw new Error(`Unexpected main window title: ${await mainWindow.title()}`);
+  }
   await application.evaluate(({ Menu }) => {
     const desktopPetMenu = Menu.getApplicationMenu().items.find((item) => item.label === '桌宠');
     desktopPetMenu.submenu.items.find((item) => item.label === '桌宠设置').click();
@@ -38,7 +42,7 @@ try {
   const settingsWindow = await application.waitForEvent('window', { timeout: 15000 });
   await settingsWindow.waitForSelector('#visionState');
   const version = await settingsWindow.locator('.beta').textContent();
-  if (version?.trim() !== 'v1.1.0 测试2版') throw new Error(`Unexpected settings version: ${version}`);
+  if (version?.trim() !== 'v1.1.0 测试3版') throw new Error(`Unexpected settings version: ${version}`);
   await settingsWindow.locator('#prepareVision').click();
   await settingsWindow.locator('#visionState').filter({ hasText: '已就绪' }).waitFor({ timeout: 90000 });
   if (process.argv[2]) await settingsWindow.screenshot({ path: process.argv[2] });
@@ -67,7 +71,7 @@ try {
   const background = await application.evaluate(({ BrowserWindow }) => {
     const windows = BrowserWindow.getAllWindows();
     const main = windows.find((window) => window.webContents.getURL().startsWith('http://127.0.0.1:'));
-    const pet = windows.find((window) => window.getTitle() === 'DeepSeek Harness 桌宠');
+    const pet = windows.find((window) => window.getTitle() === 'deep seek yu 桌宠');
     return { mainVisible: main?.isVisible(), petVisible: pet?.isVisible() };
   });
   if (background.mainVisible !== false || background.petVisible !== true) {

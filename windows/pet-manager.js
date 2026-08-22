@@ -238,7 +238,7 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
     const bounds = defaultBounds();
     petWindow = new BrowserWindow({
       ...bounds,
-      title: 'DeepSeek Harness 桌宠',
+      title: 'deep seek yu 桌宠',
       frame: false,
       transparent: true,
       backgroundColor: '#00000000',
@@ -249,7 +249,7 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
       maximizable: false,
       minimizable: false,
       show: false,
-      icon: path.join(app.getAppPath(), 'assets', 'DeepSeek-Harness-icon.ico'),
+      icon: path.join(app.getAppPath(), 'assets', 'deep-seek-yu-icon.ico'),
       webPreferences: {
         preload: path.join(app.getAppPath(), 'pet-preload.js'),
         contextIsolation: true,
@@ -307,7 +307,7 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {} }) {
       modal: false,
       backgroundColor: '#f8fafc',
       autoHideMenuBar: true,
-      icon: path.join(app.getAppPath(), 'assets', 'DeepSeek-Harness-icon.ico'),
+      icon: path.join(app.getAppPath(), 'assets', 'deep-seek-yu-icon.ico'),
       webPreferences: {
         preload: path.join(app.getAppPath(), 'pet-preload.js'),
         contextIsolation: true,
