@@ -199,8 +199,8 @@
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   })[character]);
   const pluginCss = `
-    #deep-seek-yu-plugin-panel{color:var(--dsw-alias-label-primary,#111827);font:14px/1.55 system-ui;max-height:min(68vh,720px);overflow:auto;padding:2px 4px 20px}
-    #deep-seek-yu-plugin-panel *{box-sizing:border-box}
+    #deep-seek-yu-plugin-panel,#deep-seek-yu-market-panel{color:var(--dsw-alias-label-primary,#111827);font:14px/1.55 system-ui;max-height:min(68vh,720px);overflow:auto;padding:2px 4px 20px}
+    #deep-seek-yu-plugin-panel *,#deep-seek-yu-market-panel *{box-sizing:border-box}.dsy-native-hidden{display:none!important}
     .dsy-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin:4px 0 16px}.dsy-head h3{font-size:18px;margin:0}.dsy-head p{margin:3px 0 0;color:var(--dsw-alias-label-tertiary,#64748b)}
     .dsy-version{flex:none;border:1px solid var(--dsw-alias-border-l2,#dbe2ea);border-radius:999px;padding:3px 9px;font-size:12px;color:var(--dsw-alias-label-secondary,#475569)}
     .dsy-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.dsy-card{border:1px solid var(--dsw-alias-border-l2,#e2e8f0);border-radius:14px;padding:16px;background:var(--dsw-alias-bg-layer-1,#fff);min-width:0}.dsy-card.wide{grid-column:1/-1}.dsy-card h4{font-size:15px;margin:0 0 4px}.dsy-muted{color:var(--dsw-alias-label-tertiary,#64748b);font-size:12px}.dsy-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px}.dsy-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.dsy-checks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 14px;margin-top:12px}.dsy-checks label{display:flex;align-items:center;gap:7px}.dsy-button{height:34px;border:1px solid var(--dsw-alias-border-l2,#cbd5e1);border-radius:17px;padding:0 13px;background:transparent;color:inherit;cursor:pointer}.dsy-button.primary{border:0;background:var(--dsw-alias-button-primary-fill,#111827);color:var(--dsw-alias-label-primary-foreground,#fff)}.dsy-button:disabled{opacity:.5;cursor:wait}.dsy-select,.dsy-input{height:34px;border:1px solid var(--dsw-alias-border-l2,#cbd5e1);border-radius:8px;padding:0 9px;background:var(--dsw-alias-bg-layer-1,#fff);color:inherit}.dsy-input{width:100%}.dsy-range{width:150px}.dsy-state{margin-top:10px;min-height:19px;color:var(--dsw-alias-label-secondary,#475569)}.dsy-error{color:var(--dsw-alias-state-error-primary,#dc2626);white-space:pre-wrap;overflow-wrap:anywhere}.dsy-good{color:var(--dsw-alias-state-success-primary,#16a34a)}.dsy-warning{margin-top:12px;padding:9px 11px;border-radius:9px;background:#fff7ed;color:#9a3412;font-size:12px}.dsy-market-list{display:grid;gap:8px;margin-top:10px;max-height:360px;overflow:auto}.dsy-plugin{border-top:1px solid var(--dsw-alias-border-l2,#e2e8f0);padding:10px 2px}.dsy-plugin:first-child{border-top:0}.dsy-plugin-head{display:flex;justify-content:space-between;gap:12px}.dsy-plugin-title{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.dsy-plugin strong{overflow-wrap:anywhere}.dsy-plugin p{margin:4px 0}.dsy-badge{display:inline-flex;align-items:center;height:20px;border-radius:999px;padding:0 7px;background:#eef2ff;color:#3730a3;font-size:10px;font-weight:650}.dsy-badge.official{background:#e8f7ee;color:#167044}.dsy-badge.unverified{background:#fff7ed;color:#9a3412}.dsy-badge.source{background:var(--dsw-alias-bg-layer-2,#f1f5f9);color:var(--dsw-alias-label-secondary,#475569);font-weight:500}.dsy-balance{font-size:21px;font-weight:700;margin-top:8px}
@@ -211,12 +211,11 @@
     if (panel.dataset.ready === 'true') return;
     panel.dataset.ready = 'true';
     panel.innerHTML = `
-      <div class="dsy-head"><div><h3>DeepSeek yu</h3><p>${mobileClient ? '连接电脑端 Harness，设置会同步并在电脑上立即生效。' : 'Harness 内部插件功能，设置直接保存到本机。'}</p></div><span class="dsy-version">v1.1.1 测试版</span></div>
+      <div class="dsy-head"><div><h3>DeepSeek yu</h3><p>${mobileClient ? '连接电脑端 Harness，设置会同步并在电脑上立即生效。' : 'Harness 内部插件功能，设置直接保存到本机。'}</p></div><span class="dsy-version">v1.1.1 正式版</span></div>
       <div class="dsy-grid">
         <section class="dsy-card" data-card="pet"><h4>桌宠</h4><div class="dsy-muted">桌宠在电脑桌面显示 Harness 思考、命令和对话进度。</div><div class="dsy-checks"><label><input type="checkbox" data-pet="enabled"> 启用桌宠</label><label><input type="checkbox" data-pet="alwaysOnTop"> 始终置顶</label><label><input type="checkbox" data-pet="showStatus"> 显示状态</label><label><input type="checkbox" data-pet="showChatPanel"> 显示聊天框</label><label><input type="checkbox" data-pet="backgroundOnClose"> 关闭主窗口后在后台</label></div><div class="dsy-row"><label>大小 <input class="dsy-range" data-pet="size" type="range" min="160" max="360" step="10"> <span data-size-value></span></label><div class="dsy-actions"><button class="dsy-button" data-open-pets>${mobileClient ? '打开电脑桌宠目录' : '添加桌宠'}</button><button class="dsy-button primary" data-save-pet>保存</button></div></div><div class="dsy-state" data-pet-state>正在读取…</div></section>
         <section class="dsy-card" data-card="account"><h4>余额与服务状态</h4><div class="dsy-muted">API Key 只由 Harness 后端读取，不会显示在页面。</div><div data-balance class="dsy-balance">正在读取…</div><div data-account-detail class="dsy-state"></div><button class="dsy-button" data-refresh-account>刷新</button></section>
         <section class="dsy-card wide" data-card="runtime"><h4>官方 Harness 更新</h4><div class="dsy-muted">只从 DeepSeek 官方 npm 命名空间下载。</div><div class="dsy-row"><div data-runtime-state>正在读取版本…</div><div class="dsy-actions"><select class="dsy-select" data-runtime-versions></select><button class="dsy-button primary" data-install-runtime>安装并切换</button></div></div></section>
-        <section class="dsy-card wide" data-card="market"><h4>社区插件市场</h4><div class="dsy-warning">聚合已验证目录、DSH Market 与 GitHub 的 dsh-plugin Topic。社区插件不是 DeepSeek 官方插件；第三方插件可访问文件、命令和网络，安装前请查看源码。</div><div class="dsy-row"><input class="dsy-input" data-market-search placeholder="搜索全部来源：插件名、仓库或标签"><div class="dsy-actions"><button class="dsy-button" data-open-topic>打开 GitHub Topic</button><button class="dsy-button primary" data-load-market>加载全部插件</button></div></div><div data-market-state class="dsy-state">点击“加载全部插件”聚合三个插件来源。</div><div data-market-list class="dsy-market-list"></div></section>
       </div>`;
 
     const stateText = (selector, text, error = false) => {
@@ -272,8 +271,48 @@
       finally { button.disabled = false; button.textContent = '安装并切换'; }
     });
 
+    loadPet(); loadAccount(); loadVersions();
+  };
+
+  const renderMarketPanel = (panel) => {
+    if (panel.dataset.ready === 'true') return;
+    panel.dataset.ready = 'true';
+    panel.innerHTML = `
+      <div class="dsy-head"><div><h3>社区插件</h3><p>发现、验证、安装和卸载当前 web profile 的 Harness 插件。</p></div><span class="dsy-version">v1.1.1 正式版</span></div>
+      <div class="dsy-grid">
+        <section class="dsy-card wide"><div class="dsy-row" style="margin-top:0"><div><h4>已安装插件</h4><div class="dsy-muted">“已挂载”会在重启后生效；“未激活”表示只下载了依赖，没有声明 Harness bundle。</div></div><button class="dsy-button" data-refresh-installed>刷新</button></div><div data-installed-state class="dsy-state">正在读取…</div><div data-installed-list class="dsy-market-list"></div></section>
+        <section class="dsy-card wide"><h4>插件市场</h4><div class="dsy-warning">聚合已验证目录、DSH Market 与 GitHub 的 dsh-plugin Topic。安装前会检查仓库根包；如果仓库是插件集合，会尝试按 README 改用真正可挂载的 npm 包。第三方插件可访问文件、命令和网络，请先查看源码。</div><div class="dsy-row"><input class="dsy-input" data-market-search placeholder="搜索插件名、仓库或标签"><div class="dsy-actions"><button class="dsy-button" data-open-topic>打开 GitHub Topic</button><button class="dsy-button primary" data-load-market>加载全部插件</button></div></div><div data-market-state class="dsy-state">点击“加载全部插件”聚合三个插件来源。</div><div data-market-list class="dsy-market-list"></div></section>
+      </div>`;
+    const stateText = (selector, text, error = false) => {
+      const element = panel.querySelector(selector);
+      element.textContent = text;
+      element.classList.toggle('dsy-error', error);
+    };
+    let installed = [];
     let market = [];
     let marketCounts = {};
+    const renderInstalled = () => {
+      panel.querySelector('[data-installed-list]').innerHTML = installed.map((item, index) => {
+        const status = item.bundle ? '<span class="dsy-badge official">已挂载</span>'
+          : item.installed ? '<span class="dsy-badge unverified">未激活</span>' : '<span class="dsy-badge unverified">安装不完整</span>';
+        const detail = item.bundle ? '重启客户端后由 Harness 加载' : '此包没有声明 dsh.bundle，不会改变 UI 或提供 Harness 工具';
+        return `<div class="dsy-plugin"><div class="dsy-plugin-head"><div><div class="dsy-plugin-title"><strong>${escapeHtml(item.name)}</strong>${status}</div><div class="dsy-muted">${escapeHtml(item.version || item.requested)} · ${escapeHtml(detail)}</div></div><button class="dsy-button" data-remove="${index}">卸载</button></div>${item.description ? `<p>${escapeHtml(item.description)}</p>` : ''}</div>`;
+      }).join('') || '<div class="dsy-muted">当前没有另外安装的社区插件。</div>';
+      stateText('[data-installed-state]', `当前 ${installed.length} 个依赖 · 已挂载 ${installed.filter((item) => item.bundle).length} 个 · 未激活 ${installed.filter((item) => !item.bundle).length} 个`);
+      panel.querySelectorAll('[data-remove]').forEach((button) => button.addEventListener('click', async () => {
+        const item = installed[Number(button.dataset.remove)];
+        button.disabled = true; button.textContent = '卸载中…';
+        try {
+          const result = await request('extensions:remove-plugin', { name: item.name }, 600000);
+          if (!result.canceled) { await loadInstalled(); stateText('[data-installed-state]', result.restartRequired ? '卸载完成，请重启 DeepSeek yu。' : '未激活依赖已卸载。'); }
+        } catch (error) { stateText('[data-installed-state]', error.message, true); }
+        finally { button.disabled = false; button.textContent = '卸载'; }
+      }));
+    };
+    const loadInstalled = async () => {
+      try { const value = await request('extensions:installed'); installed = value.plugins || []; renderInstalled(); }
+      catch (error) { stateText('[data-installed-state]', error.message, true); }
+    };
     const renderMarket = () => {
       const query = panel.querySelector('[data-market-search]').value.trim().toLowerCase();
       const matched = market.filter((item) => !query || [item.name, item.repo, item.description, ...(item.tags || [])].join(' ').toLowerCase().includes(query));
@@ -283,16 +322,22 @@
           : item.verified ? '<span class="dsy-badge">已验证</span>' : '<span class="dsy-badge unverified">未验证</span>';
         const sources = (item.catalogs || []).map((source) => `<span class="dsy-badge source">${escapeHtml(source)}</span>`).join('');
         return `<div class="dsy-plugin"><div class="dsy-plugin-head"><div><div class="dsy-plugin-title"><strong>${escapeHtml(item.name)}</strong>${badge}${sources}</div><div class="dsy-muted">${escapeHtml(item.repo)} · ★ ${item.stars ?? '—'}</div></div><div class="dsy-actions"><button class="dsy-button" data-source="${index}">源码</button><button class="dsy-button primary" data-install="${index}">安装</button></div></div><p>${escapeHtml(item.description)}</p></div>`;
-      }).join('') || '<div class="dsy-muted">完整目录中没有匹配的插件。</div>';
-      if (market.length) stateText('[data-market-state]', `聚合去重 ${marketCounts.total || market.length} 个 · DSH Market ${marketCounts.market || 0} · 已验证 ${marketCounts.verified || 0} · Topic 最新 ${marketCounts.live || 0} · 匹配 ${matched.length}${items.length < matched.length ? ` · 显示前 ${items.length} 个，请输入关键词缩小范围` : ''}`);
+      }).join('') || '<div class="dsy-muted">目录中没有匹配的插件。</div>';
+      if (market.length) stateText('[data-market-state]', `聚合去重 ${marketCounts.total || market.length} 个 · DSH Market ${marketCounts.market || 0} · 已验证 ${marketCounts.verified || 0} · Topic 最新 ${marketCounts.live || 0} · 匹配 ${matched.length}${items.length < matched.length ? ` · 显示前 ${items.length} 个` : ''}`);
       panel.querySelectorAll('[data-source]').forEach((button) => button.addEventListener('click', () => request('extensions:open-source', { url: items[Number(button.dataset.source)].sourceUrl })));
       panel.querySelectorAll('[data-install]').forEach((button) => button.addEventListener('click', async () => {
-        button.disabled = true; button.textContent = '安装中…';
-        try { const result = await request('extensions:install-plugin', { plugin: items[Number(button.dataset.install)] }, 600000); if (!result.canceled) stateText('[data-market-state]', '安装完成，请重启 DeepSeek yu。'); }
-        catch (error) { stateText('[data-market-state]', error.message, true); }
+        button.disabled = true; button.textContent = '检查兼容性…';
+        try {
+          const result = await request('extensions:install-plugin', { plugin: items[Number(button.dataset.install)] }, 600000);
+          if (!result.canceled) {
+            await loadInstalled();
+            stateText('[data-market-state]', result.warning || (result.adapted ? `已自动选择兼容的 bundle ${result.packageName}，安装完成，请重启 DeepSeek yu。` : '安装并挂载完成，请重启 DeepSeek yu。'), Boolean(result.warning));
+          }
+        } catch (error) { stateText('[data-market-state]', error.message, true); }
         finally { button.disabled = false; button.textContent = '安装'; }
       }));
     };
+    panel.querySelector('[data-refresh-installed]').addEventListener('click', loadInstalled);
     panel.querySelector('[data-market-search]').addEventListener('input', renderMarket);
     panel.querySelector('[data-open-topic]').addEventListener('click', () => request('extensions:open-topic').catch((error) => stateText('[data-market-state]', error.message, true)));
     panel.querySelector('[data-load-market]').addEventListener('click', async (event) => {
@@ -301,51 +346,60 @@
       catch (error) { stateText('[data-market-state]', error.message, true); }
       finally { button.disabled = false; button.textContent = '重新加载全部'; }
     });
-    loadPet(); loadAccount(); loadVersions();
+    loadInstalled();
   };
 
   const installSettingsPlugin = () => {
     const settingsPanel = document.querySelector('.VOzbGW_panel');
     const navList = settingsPanel?.querySelector('.VOzbGW_navList');
     const options = settingsPanel?.querySelector('.VOzbGW_options');
-    if (!navList || !options || navList.querySelector('#deep-seek-yu-settings-nav')) return;
+    if (!navList || !options || (navList.querySelector('#deep-seek-yu-settings-nav') && navList.querySelector('#deep-seek-yu-market-nav'))) return;
     if (!document.getElementById('deep-seek-yu-plugin-style')) {
       const style = document.createElement('style'); style.id = 'deep-seek-yu-plugin-style'; style.textContent = pluginCss; document.head.append(style);
     }
     const officialNavigation = [...navList.querySelectorAll('button')];
     if (!officialNavigation.length) return;
-    const navigation = document.createElement('button');
-    navigation.id = 'deep-seek-yu-settings-nav';
-    navigation.type = 'button';
-    navigation.className = officialNavigation[0].className.replace(/\bVOzbGW_active\b/g, '').trim();
-    navigation.setAttribute('aria-label', 'DeepSeek yu');
     const sourceIcon = officialNavigation.find((item) => item.textContent.trim() === '插件')?.querySelector('svg')
       || officialNavigation[0].querySelector('svg');
-    if (sourceIcon) navigation.append(sourceIcon.cloneNode(true));
-    const labelElement = officialNavigation[0].querySelector('span')?.cloneNode(false) || document.createElement('span');
-    labelElement.textContent = 'DeepSeek yu';
-    navigation.append(labelElement);
-    const panel = document.createElement('div');
-    panel.id = 'deep-seek-yu-plugin-panel';
-    navigation.addEventListener('click', () => {
+    const createNavigation = (id, text) => {
+      const navigation = document.createElement('button');
+      navigation.id = id;
+      navigation.type = 'button';
+      navigation.className = officialNavigation[0].className.replace(/\bVOzbGW_active\b/g, '').trim();
+      navigation.setAttribute('aria-label', text);
+      if (sourceIcon) navigation.append(sourceIcon.cloneNode(true));
+      const labelElement = officialNavigation[0].querySelector('span')?.cloneNode(false) || document.createElement('span');
+      labelElement.textContent = text;
+      navigation.append(labelElement);
+      return navigation;
+    };
+    const navigation = createNavigation('deep-seek-yu-settings-nav', 'DeepSeek yu');
+    const marketNavigation = createNavigation('deep-seek-yu-market-nav', '社区插件');
+    const panel = Object.assign(document.createElement('div'), { id: 'deep-seek-yu-plugin-panel' });
+    const marketPanel = Object.assign(document.createElement('div'), { id: 'deep-seek-yu-market-panel' });
+    const customNavigations = [navigation, marketNavigation];
+    const customPanels = [panel, marketPanel];
+    const activate = (selectedNavigation, selectedPanel, render) => {
       officialNavigation.forEach((item) => { item.classList.remove('VOzbGW_active'); item.removeAttribute('aria-current'); });
-      navigation.classList.add('VOzbGW_active'); navigation.setAttribute('aria-current', 'true');
+      customNavigations.forEach((item) => { item.classList.toggle('VOzbGW_active', item === selectedNavigation); item.removeAttribute('aria-current'); });
+      selectedNavigation.setAttribute('aria-current', 'true');
       [...options.children].forEach((item) => {
-        if (item === panel) return;
-        item.hidden = true;
-        item.dataset.deepSeekYuHidden = 'true';
+        item.classList.toggle('dsy-native-hidden', item !== selectedPanel);
       });
-      if (!panel.isConnected) options.append(panel);
-      renderPluginPanel(panel);
-    });
+      if (!selectedPanel.isConnected) options.append(selectedPanel);
+      selectedPanel.classList.remove('dsy-native-hidden');
+      render(selectedPanel);
+    };
+    navigation.addEventListener('click', () => activate(navigation, panel, renderPluginPanel));
+    marketNavigation.addEventListener('click', () => activate(marketNavigation, marketPanel, renderMarketPanel));
     officialNavigation.forEach((item) => item.addEventListener('click', () => {
-      navigation.classList.remove('VOzbGW_active'); navigation.removeAttribute('aria-current');
+      customNavigations.forEach((candidate) => { candidate.classList.remove('VOzbGW_active'); candidate.removeAttribute('aria-current'); });
       [...options.children].forEach((candidate) => {
-        if (candidate.dataset.deepSeekYuHidden) { candidate.hidden = false; delete candidate.dataset.deepSeekYuHidden; }
+        candidate.classList.remove('dsy-native-hidden');
       });
-      panel.remove();
+      customPanels.forEach((candidate) => candidate.remove());
     }));
-    navList.append(navigation);
+    navList.append(navigation, marketNavigation);
   };
 
   new MutationObserver(() => { installPetEntry(); installSidebarBalance(); installSettingsPlugin(); }).observe(document.documentElement, { childList: true, subtree: true });

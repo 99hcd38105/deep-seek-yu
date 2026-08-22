@@ -82,12 +82,22 @@ try {
   await pluginPanel.getByText('桌宠', { exact: true }).waitFor();
   await pluginPanel.getByText('余额与服务状态', { exact: true }).waitFor();
   await pluginPanel.getByText('官方 Harness 更新', { exact: true }).waitFor();
-  await pluginPanel.getByText('社区插件市场', { exact: true }).waitFor();
+  if (await pluginPanel.getByText('插件市场', { exact: true }).count()) throw new Error('社区插件市场不应继续混在 DeepSeek yu 页面中。');
+  const mixedNativePage = await pluginPanel.evaluate((element) => [...element.parentElement.children]
+    .some((item) => item !== element && !item.classList.contains('dsy-native-hidden')));
+  if (mixedNativePage) throw new Error('DeepSeek yu 页面仍与上一次打开的官方设置页混合显示。');
   await pluginPanel.locator('[data-pet-state]').filter({ hasNotText: '正在读取' }).waitFor({ timeout: 15000 });
   await pluginPanel.locator('[data-runtime-state]').filter({ hasText: '0.1.1-rc.2' }).waitFor({ timeout: 45000 });
   await pluginPanel.locator('[data-pet="size"]').fill('180');
   await pluginPanel.locator('[data-save-pet]').click();
   await pluginPanel.locator('[data-pet-state]').filter({ hasText: '已保存' }).waitFor({ timeout: 15000 });
+  const marketNavigation = settings.getByRole('button', { name: '社区插件', exact: true });
+  await marketNavigation.click();
+  const marketPanel = settings.locator('#deep-seek-yu-market-panel');
+  await marketPanel.getByText('插件市场', { exact: true }).waitFor();
+  await marketPanel.getByText('已安装插件', { exact: true }).waitFor();
+  await marketPanel.locator('[data-installed-state]').filter({ hasNotText: '正在读取' }).waitFor({ timeout: 15000 });
+  if (await pluginPanel.isVisible()) throw new Error('切换社区插件页后 DeepSeek yu 页面没有隐藏。');
 
   const timeoutPatch = await application.evaluate(({ app }) => {
     const fs = process.getBuiltinModule('node:fs');

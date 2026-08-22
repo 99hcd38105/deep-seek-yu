@@ -67,10 +67,10 @@ try {
   const geometry = await mobile.evaluate(() => ({ width: innerWidth, scrollWidth: document.documentElement.scrollWidth }));
   if (geometry.scrollWidth > geometry.width + 2) throw new Error(`手机页面横向溢出：${JSON.stringify(geometry)}`);
   await mobile.locator('[data-mobile-nav="plugin"]').click();
-  const panel = mobile.locator('#deep-seek-yu-plugin-panel');
+  const panel = mobile.locator('#deep-seek-yu-market-panel');
   await panel.waitFor({ timeout: 30000 });
-  await panel.locator('[data-pet-state]').filter({ hasNotText: '正在读取' }).waitFor({ timeout: 30000 });
-  await panel.locator('[data-runtime-state]').filter({ hasText: '0.1.1-rc.2' }).waitFor({ timeout: 60000 });
+  await panel.getByText('插件市场', { exact: true }).waitFor({ timeout: 30000 });
+  await panel.locator('[data-installed-state]').filter({ hasNotText: '正在读取' }).waitFor({ timeout: 30000 });
   const panelBox = await panel.boundingBox();
   const panelVisibility = await panel.evaluate((element) => ({
     hidden: element.hidden, display: getComputedStyle(element).display,

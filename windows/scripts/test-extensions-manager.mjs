@@ -6,7 +6,8 @@ import YAML from 'yaml';
 
 const require = createRequire(import.meta.url);
 const {
-  addAllowedBuilds, approvalFromFailure, ensurePnpmShim, normalizeRegistry,
+  addAllowedBuilds, approvalFromFailure, ensurePnpmShim, installedPlugins, normalizeRegistry,
+  recommendedInstallSpec,
 } = require('../extensions-manager');
 
 const registry = normalizeRegistry({
@@ -40,6 +41,11 @@ const duplicate = registry.plugins.find((item) => item.repo === 'owner/market');
 if (duplicate.installSpec !== '@owner/market') throw new Error('npm install target should be preferred over the GitHub prepare path.');
 if (duplicate.catalogs.length !== 3 || !duplicate.verified) throw new Error('Duplicate catalogs and verification should be merged.');
 if (registry.plugins.some((item) => item.name === 'Rejected')) throw new Error('Rejected entries must not be exposed.');
+const recommended = recommendedInstallSpec(`
+  dsh plugin --profile web add github:owner/monorepo
+  dsh plugin --profile web add @owner/web-ui-all@latest
+`);
+if (recommended !== '@owner/web-ui-all@latest') throw new Error(`Expected npm bundle recommendation, got ${recommended}`);
 
 const gitApproval = approvalFromFailure(
   'ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED\ngit-hosted package "dsh-market@1.0.0" needs to execute build scripts',
@@ -65,6 +71,23 @@ try {
 
   const profile = path.join(fixture, 'profile');
   mkdirSync(profile, { recursive: true });
+  mkdirSync(path.join(profile, 'node_modules', '@owner', 'active'), { recursive: true });
+  mkdirSync(path.join(profile, 'node_modules', 'plain-library'), { recursive: true });
+  writeFileSync(path.join(profile, 'package.json'), JSON.stringify({
+    dependencies: { '@owner/active': '^1.0.0', 'plain-library': 'github:owner/monorepo' },
+    dsh: { profile: { bundles: ['@owner/active'] } },
+  }));
+  writeFileSync(path.join(profile, 'node_modules', '@owner', 'active', 'package.json'), JSON.stringify({
+    name: '@owner/active', version: '1.2.0', dsh: { bundle: { patch: './cordis.patch.yml' } },
+  }));
+  writeFileSync(path.join(profile, 'node_modules', 'plain-library', 'package.json'), JSON.stringify({
+    name: 'plain-library', version: '0.1.0', private: true,
+  }));
+  const installed = installedPlugins(profile);
+  if (installed.length !== 2 || installed.find((item) => item.name === '@owner/active')?.status !== 'active'
+    || installed.find((item) => item.name === 'plain-library')?.status !== 'inactive') {
+    throw new Error(`Installed plugin activation status is incorrect: ${JSON.stringify(installed)}`);
+  }
   writeFileSync(path.join(profile, 'pnpm-workspace.yaml'), 'packages:\n  - .\nnodeLinker: hoisted\n');
   addAllowedBuilds(profile, ['dsh-market@git+https://github.com/dsh-market/dsh-market.git', 'esbuild']);
   const yaml = YAML.parse(readFileSync(path.join(profile, 'pnpm-workspace.yaml'), 'utf8'));
@@ -74,4 +97,4 @@ try {
   if (yaml.nodeLinker !== 'hoisted') throw new Error('Existing workspace settings were not preserved.');
 } finally { rmSync(fixture, { recursive: true, force: true }); }
 
-process.stdout.write(`extensions manager test passed: ${registry.plugins.length} merged entries, pnpm shim and build approvals verified\n`);
+process.stdout.write(`extensions manager test passed: registry, compatibility recommendation, installed status, pnpm shim and build approvals verified\n`);

@@ -428,8 +428,10 @@ async function dispatchMobileControl(action) {
     case 'desktop-pet:open-directory': await desktopPet?.openDirectory(); return { ok: true };
     case 'extensions:versions':
     case 'extensions:registry':
+    case 'extensions:installed':
     case 'extensions:install-runtime':
     case 'extensions:install-plugin':
+    case 'extensions:remove-plugin':
     case 'extensions:open-source':
     case 'extensions:open-topic':
       if (!extensionsManager) throw new Error('插件管理器尚未就绪。');

@@ -18,6 +18,18 @@ function packageName(value) {
   return /^(@[a-z0-9._-]+\/)?[a-z0-9._-]+$/i.test(name) ? name : '';
 }
 
+function npmInstallSpec(value) {
+  const spec = String(value || '').trim();
+  return /^(@[a-z0-9._-]+\/[a-z0-9._-]+|[a-z0-9._-]+)(?:@(?:[a-z0-9*^~<>=._+-]+))?$/i.test(spec) ? spec : '';
+}
+
+function packageNameFromSpec(value) {
+  const spec = npmInstallSpec(value);
+  if (!spec) return '';
+  const separator = spec.startsWith('@') ? spec.lastIndexOf('@') : spec.indexOf('@');
+  return packageName(separator > 0 ? spec.slice(0, separator) : spec);
+}
+
 function repositoryName(value) {
   const repo = String(value || '').trim().replace(/^https?:\/\/github\.com\//i, '').replace(/\.git\/?$/, '').replace(/\/$/, '');
   return /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo) ? repo : '';
@@ -35,11 +47,18 @@ function installSpec(plugin) {
 function commandInstallSpec(commands) {
   const candidates = [];
   for (const command of Array.isArray(commands) ? commands : []) {
-    const match = /\bdsh(?:\.cmd)?\s+plugin\b[^\r\n]*?\badd\s+(?:"([^"]+)"|'([^']+)'|([^\s]+))/i.exec(String(command));
-    const candidate = String(match?.[1] || match?.[2] || match?.[3] || '').replace(/["']+$/, '');
-    if (packageName(candidate) || /^github:[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:#path:[^\s]+)?$/i.test(candidate)) candidates.push(candidate);
+    const source = String(command).trim();
+    const match = /\bdsh(?:\.cmd)?\s+plugin\b[^\r\n]*?\badd\s+(?:"([^"]+)"|'([^']+)'|([^\s]+))/i.exec(source);
+    const candidate = String(match?.[1] || match?.[2] || match?.[3] || source).replace(/["']+$/, '');
+    if (npmInstallSpec(candidate) || /^github:[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:#path:[^\s]+)?$/i.test(candidate)) candidates.push(candidate);
   }
-  return candidates.find((candidate) => packageName(candidate)) || candidates[0] || '';
+  return candidates.find((candidate) => npmInstallSpec(candidate)) || candidates[0] || '';
+}
+
+function recommendedInstallSpec(readme, installCommands = []) {
+  const commands = [...String(readme || '').matchAll(/\bdsh(?:\.cmd)?\s+plugin\s+--profile\s+web\s+add\s+([^\s`"']+)/gi)]
+    .map((match) => String(match[1] || '').replace(/[),.;]+$/, ''));
+  return commandInstallSpec([...(installCommands || []), ...commands]);
 }
 
 function atomicJson(filename, value) {
@@ -81,6 +100,7 @@ function normalizedEntry(item) {
     official: Boolean(item.official), featured: Boolean(item.featured),
     status: String(item.status || 'unverified'), verified: Boolean(item.verified),
     catalogs: Array.isArray(item.catalogs) ? item.catalogs : [],
+    installCommands: Array.isArray(item.installCommands) ? item.installCommands.map(String).slice(0, 8) : [],
   };
   entry.sourceUrl = `https://github.com/${entry.repo}`;
   entry.installSpec = installSpec(entry);
@@ -103,7 +123,7 @@ function normalizeMarket(data) {
   return (Array.isArray(data?.plugins) ? data.plugins : []).map((item) => {
     const repo = repositoryName(item.fullName || `${item.owner || ''}/${item.repo || ''}`);
     const target = commandInstallSpec(item.install?.commands);
-    const npm = packageName(target);
+    const npm = packageNameFromSpec(target);
     const github = /^github:([^#]+)(?:#path:(.+))?$/i.exec(target);
     return normalizedEntry({
       name: item.name || repo.split('/').pop(), repo: github?.[1] || repo,
@@ -114,6 +134,7 @@ function normalizeMarket(data) {
       featured: Boolean(item.curated), verified: item.verdict === 'pass',
       status: item.verdict === 'pass' ? 'verified' : item.curated ? 'curated' : 'unverified',
       catalogs: ['DSH Market'],
+      installCommands: item.install?.commands,
     });
   }).filter((item) => item.category === 'plugin' && item.repo && item.installSpec);
 }
@@ -146,6 +167,7 @@ function mergeEntries(groups) {
     if (next.verified) next.status = 'verified';
     next.tags = [...new Set([...next.tags, ...item.tags])].slice(0, 10);
     next.catalogs = [...new Set([...next.catalogs, ...item.catalogs])];
+    next.installCommands = [...new Set([...(next.installCommands || []), ...(item.installCommands || [])])].slice(0, 8);
     next.installSpec = installSpec(next);
     merged.set(key, next);
   }
@@ -192,7 +214,7 @@ function cleanProcessError(value) {
     return `插件依赖包含被 pnpm 阻止的构建脚本。\n${text.split('\n').filter((line) => /ERR_PNPM|Ignored build scripts|approve-builds/i.test(line)).slice(-4).join('\n')}`.slice(0, 1500);
   }
   if (/['"]pnpm['"].*(not recognized|不是内部或外部命令)/i.test(text)) {
-    return '客户端缺少 pnpm 插件管理组件。请升级或重新安装 DeepSeek yu 1.1.1 测试版。';
+    return '客户端缺少 pnpm 插件管理组件。请升级或重新安装 DeepSeek yu 1.1.1。';
   }
   const lines = text.split('\n').filter(Boolean);
   return lines.slice(-10).join('\n').slice(0, 1500) || '插件安装失败。';
@@ -258,22 +280,87 @@ function approvalFromFailure(message, plugin) {
   return [...new Set(keys)].filter((key) => /^(@[a-z0-9._-]+\/)?[a-z0-9._-]+(?:@git\+https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\.git)?$/i.test(key));
 }
 
+function installedPlugins(profileDir) {
+  const profile = readJson(path.join(profileDir, 'package.json')) || {};
+  const dependencies = profile.dependencies || {};
+  const bundles = new Set(profile.dsh?.profile?.bundles || []);
+  return Object.entries(dependencies).map(([name, requested]) => {
+    const manifest = readJson(path.join(profileDir, 'node_modules', ...name.split('/'), 'package.json')) || {};
+    const bundle = Boolean(manifest.dsh?.bundle?.patch && bundles.has(name));
+    const repository = typeof manifest.repository === 'string' ? manifest.repository : manifest.repository?.url;
+    return {
+      name, requested: String(requested), version: String(manifest.version || ''),
+      bundle, installed: Boolean(manifest.name),
+      status: !manifest.name ? 'missing' : bundle ? 'active' : 'inactive',
+      description: String(manifest.description || ''),
+      sourceUrl: String(manifest.homepage || repository || '').replace(/^git\+/, '').replace(/\.git$/, ''),
+    };
+  }).sort((left, right) => Number(right.bundle) - Number(left.bundle) || left.name.localeCompare(right.name));
+}
+
 function createExtensionsManager({ app, mainWindow, runtimeManager, dshHome, onRestartRequired }) {
   let operation = null;
   const cachePath = path.join(app.getPath('userData'), 'community-plugins-cache.json');
 
-  async function fetchJson(url, timeout = 60000) {
+  async function fetchResource(url, timeout = 60000, format = 'json') {
     const rule = await mainWindow.webContents.session.resolveProxy(url);
     const proxy = proxyUrl(rule);
     const dispatcher = proxy ? new ProxyAgent(proxy) : null;
     try {
       const response = await fetch(url, {
-        headers: { Accept: 'application/json', 'User-Agent': 'DeepSeek-yu-plugin-discovery' },
+        headers: { Accept: 'application/json, text/plain;q=0.9', 'User-Agent': 'DeepSeek-yu-plugin-discovery' },
         signal: AbortSignal.timeout(timeout), ...(dispatcher ? { dispatcher } : {}),
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return response.json();
+      return format === 'text' ? response.text() : response.json();
     } finally { if (dispatcher) await dispatcher.close(); }
+  }
+
+  async function fetchJson(url, timeout = 60000) {
+    return fetchResource(url, timeout, 'json');
+  }
+
+  async function fetchText(url, timeout = 60000) {
+    return fetchResource(url, timeout, 'text');
+  }
+
+  async function compatibleInstall(plugin) {
+    const original = installSpec(plugin || {});
+    if (!original || plugin.npm) return { spec: original, packageName: packageName(plugin.npm), adapted: false };
+    const repo = repositoryName(plugin.repo);
+    if (!repo) return { spec: original, packageName: '', adapted: false };
+    try {
+      const metadata = await fetchJson(`https://api.github.com/repos/${repo}`, 30000);
+      const branch = encodeURIComponent(String(metadata.default_branch || 'main'));
+      const [manifestResult, readmeResult] = await Promise.allSettled([
+        fetchJson(`https://raw.githubusercontent.com/${repo}/${branch}/package.json`, 30000),
+        fetchText(`https://raw.githubusercontent.com/${repo}/${branch}/README.md`, 30000),
+      ]);
+      const manifest = manifestResult.status === 'fulfilled' ? manifestResult.value : {};
+      if (manifest.dsh?.bundle?.patch) {
+        return { spec: original, packageName: packageName(manifest.name), adapted: false };
+      }
+      const readme = readmeResult.status === 'fulfilled' ? readmeResult.value : '';
+      const declared = recommendedInstallSpec(readme, plugin.installCommands);
+      if (declared && declared !== original) {
+        return {
+          spec: declared, packageName: packageNameFromSpec(declared), adapted: true,
+          reason: `仓库根包${manifest.private ? '是私有工作区' : '没有声明 dsh.bundle'}，已按仓库 README 改用可挂载插件`,
+        };
+      }
+      return { spec: original, packageName: packageName(manifest.name), adapted: false };
+    } catch {
+      return { spec: original, packageName: '', adapted: false };
+    }
+  }
+
+  function pluginEnvironment() {
+    const shimPath = ensurePnpmShim(app);
+    return {
+      DSH_HOME: dshHome(), PNPM_HOME: shimPath,
+      PATH: `${shimPath}${path.delimiter}${process.env.PATH || ''}`,
+      CI: 'true', FORCE_COLOR: '0', NO_COLOR: '1', LANG: 'en_US.UTF-8',
+    };
   }
 
   async function registry() {
@@ -310,26 +397,24 @@ function createExtensionsManager({ app, mainWindow, runtimeManager, dshHome, onR
 
   async function installPlugin(plugin) {
     if (operation) throw new Error('已有操作正在进行。');
-    const spec = installSpec(plugin || {});
+    const compatible = await compatibleInstall(plugin || {});
+    const spec = compatible.spec;
     if (!spec) throw new Error('插件安装来源无效。');
     const sourceUrl = `https://github.com/${plugin.repo}`;
     const verification = plugin.official ? '官方目录条目'
       : plugin.verified ? '社区目录已验证' : `未验证条目（状态：${plugin.status || 'unverified'}）`;
     const choice = await dialog.showMessageBox(mainWindow, {
       type: 'warning', title: '安装第三方 Harness 插件', message: `确认安装 ${plugin.name || spec}？`,
-      detail: `来源：${sourceUrl}\n安装项：${spec}\n收录目录：${(plugin.catalogs || []).join('、') || '社区发现'}\n目录状态：${verification}\n\n第三方插件可以访问 Harness 的文件、命令和网络能力。请先查看源码；未验证条目风险更高。`,
+      detail: `来源：${sourceUrl}\n安装项：${spec}${compatible.adapted ? `\n兼容适配：${compatible.reason}` : ''}\n收录目录：${(plugin.catalogs || []).join('、') || '社区发现'}\n目录状态：${verification}\n\n第三方插件可以访问 Harness 的文件、命令和网络能力。请先查看源码；未验证条目风险更高。`,
       buttons: ['取消', '查看源码', '我已了解，安装'], defaultId: 0, cancelId: 0,
     });
     if (choice.response === 1) { await shell.openExternal(sourceUrl); return { canceled: true }; }
     if (choice.response !== 2) return { canceled: true };
 
     const active = runtimeManager.active();
-    const shimPath = ensurePnpmShim(app);
-    const environment = {
-      DSH_HOME: dshHome(), PNPM_HOME: shimPath,
-      PATH: `${shimPath}${path.delimiter}${process.env.PATH || ''}`,
-      CI: 'true', FORCE_COLOR: '0', NO_COLOR: '1', LANG: 'en_US.UTF-8',
-    };
+    const profileDir = path.join(dshHome(), 'profiles', 'web');
+    const before = installedPlugins(profileDir);
+    const environment = pluginEnvironment();
     const execute = () => runDsh(app, active.entry,
       ['plugin', '--profile', 'web', 'add', spec, '--reporter=append-only'], environment);
     operation = execute();
@@ -346,12 +431,45 @@ function createExtensionsManager({ app, mainWindow, runtimeManager, dshHome, onR
         });
         if (approval.response === 1) { await shell.openExternal(sourceUrl); return { canceled: true }; }
         if (approval.response !== 2) return { canceled: true };
-        addAllowedBuilds(path.join(dshHome(), 'profiles', 'web'), approvals);
+        addAllowedBuilds(profileDir, approvals);
         operation = execute();
         await operation;
       }
+      const after = installedPlugins(profileDir);
+      const added = after.filter((item) => !before.some((previous) => previous.name === item.name));
+      const installed = after.find((item) => item.name === compatible.packageName) || added[0];
+      if (!installed?.bundle) {
+        return {
+          ok: true, restartRequired: false, active: false,
+          warning: installed
+            ? `${installed.name} 已下载，但它没有向 Harness 声明可挂载的 dsh.bundle，因此不会改变界面或提供工具。可以在“已安装插件”中卸载。`
+            : '依赖下载完成，但没有检测到可挂载的 Harness bundle。请在“已安装插件”中查看状态。',
+        };
+      }
       onRestartRequired();
-      return { ok: true, restartRequired: true };
+      return { ok: true, restartRequired: true, active: true, packageName: installed.name, adapted: compatible.adapted };
+    } finally { operation = null; }
+  }
+
+  async function removePlugin(name) {
+    if (operation) throw new Error('已有操作正在进行。');
+    const profileDir = path.join(dshHome(), 'profiles', 'web');
+    const installed = installedPlugins(profileDir);
+    const plugin = installed.find((item) => item.name === name);
+    if (!plugin) throw new Error('该插件不在当前 web profile 中。');
+    const choice = await dialog.showMessageBox(mainWindow, {
+      type: 'warning', title: '卸载 Harness 插件', message: `确认卸载 ${plugin.name}？`,
+      detail: `${plugin.bundle ? '该插件当前已挂载，卸载后需要重启客户端。' : '该依赖没有成功挂载，可以安全从 profile 中移除。'}\n\n卸载只删除插件包和它在 profile 中的挂载，不删除工作区、会话或 DeepSeek API Key。`,
+      buttons: ['取消', '卸载'], defaultId: 0, cancelId: 0,
+    });
+    if (choice.response !== 1) return { canceled: true };
+    const active = runtimeManager.active();
+    operation = runDsh(app, active.entry,
+      ['plugin', '--profile', 'web', 'remove', plugin.name, '--reporter=append-only'], pluginEnvironment());
+    try {
+      await operation;
+      if (plugin.bundle) onRestartRequired();
+      return { ok: true, restartRequired: plugin.bundle };
     } finally { operation = null; }
   }
 
@@ -359,8 +477,10 @@ function createExtensionsManager({ app, mainWindow, runtimeManager, dshHome, onR
     switch (action?.type) {
       case 'extensions:versions': return runtimeManager.versions();
       case 'extensions:registry': return registry();
+      case 'extensions:installed': return { plugins: installedPlugins(path.join(dshHome(), 'profiles', 'web')) };
       case 'extensions:install-runtime': return installRuntime(String(action.payload?.version || ''));
       case 'extensions:install-plugin': return installPlugin(action.payload?.plugin || {});
+      case 'extensions:remove-plugin': return removePlugin(String(action.payload?.name || ''));
       case 'extensions:open-source': {
         const url = String(action.payload?.url || '');
         if (!/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/?$/i.test(url)) throw new Error('只允许打开 GitHub 插件仓库源码。');
@@ -379,5 +499,6 @@ function createExtensionsManager({ app, mainWindow, runtimeManager, dshHome, onR
 
 module.exports = {
   addAllowedBuilds, approvalFromFailure, createExtensionsManager, ensurePnpmShim,
-  installSpec, normalizeRegistry, normalizeLive, normalizeMarket, normalizeVerified,
+  installSpec, installedPlugins, normalizeRegistry, normalizeLive, normalizeMarket, normalizeVerified,
+  recommendedInstallSpec,
 };
