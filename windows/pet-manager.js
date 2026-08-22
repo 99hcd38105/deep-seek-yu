@@ -81,6 +81,7 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {}, onPluginAc
   let imageProcessing = false;
   let lastBusy = false;
   let lastSubmitAt = 0;
+  let chatCollapsed = false;
   let messages = [];
   let messagesSignature = '';
   let destroyed = false;
@@ -212,14 +213,26 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {}, onPluginAc
     successTimer = setTimeout(() => setStatus('idle'), delay);
   }
 
+  function petWindowSize(current) {
+    if (!current.showChatPanel) return { width: current.size, height: Math.round(current.size * 1.28) };
+    if (chatCollapsed) {
+      return {
+        width: Math.max(220, Math.min(380, current.size + 20)),
+        height: Math.max(270, Math.round(current.size * 1.3)),
+      };
+    }
+    return {
+      width: Math.max(300, Math.min(440, current.size + 80)),
+      height: Math.max(360, Math.round(current.size * 1.62)),
+    };
+  }
+
   function defaultBounds() {
     const current = loadSettings();
-    const width = current.showChatPanel ? Math.max(300, Math.min(460, current.size + 100)) : current.size;
     const workArea = screen.getPrimaryDisplay().workArea;
-    const desiredHeight = current.showChatPanel
-      ? Math.max(450, Math.round(current.size * 1.9))
-      : Math.round(current.size * 1.28);
-    const height = Math.min(desiredHeight, workArea.height - 20);
+    const desired = petWindowSize(current);
+    const width = Math.min(desired.width, workArea.width - 20);
+    const height = Math.min(desired.height, workArea.height - 20);
     const saved = current.position;
     if (saved && saved.x >= workArea.x - width + 80 && saved.x <= workArea.x + workArea.width - 80
       && saved.y >= workArea.y && saved.y <= workArea.y + workArea.height - 80) {
@@ -243,6 +256,20 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {}, onPluginAc
     if (current.enabled) petWindow.showInactive(); else petWindow.hide();
     broadcastState();
     onMenuChange();
+  }
+
+  function setChatCollapsed(value) {
+    chatCollapsed = Boolean(value);
+    if (!petWindow || petWindow.isDestroyed()) return { collapsed: chatCollapsed };
+    const previous = petWindow.getBounds();
+    const display = screen.getDisplayMatching(previous).workArea;
+    const desired = petWindowSize(loadSettings());
+    const width = Math.min(desired.width, display.width - 20);
+    const height = Math.min(desired.height, display.height - 20);
+    const x = Math.round(clamp(previous.x + previous.width - width, display.x, display.x + display.width - width));
+    const y = Math.round(clamp(previous.y + previous.height - height, display.y, display.y + display.height - height));
+    petWindow.setBounds({ x, y, width, height }, true);
+    return { collapsed: chatCollapsed, bounds: petWindow.getBounds() };
   }
 
   function createPetWindow() {
@@ -444,6 +471,16 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {}, onPluginAc
             let result;
             if (action.type === 'desktop-pet:get-settings') result = settingsPayload();
             else if (action.type === 'desktop-pet:save-settings') result = updateSettings(action.payload || {});
+            else if (action.type === 'desktop-pet:prepare-vision') {
+              await localVision.prepare();
+              result = localVision.getState();
+            } else if (action.type === 'desktop-pet:choose-image') result = await chooseImage(action.payload?.question || '');
+            else if (action.type === 'desktop-pet:open-model-directory') {
+              fs.mkdirSync(localVision.modelDirectory(), { recursive: true });
+              const opened = await shell.openPath(localVision.modelDirectory());
+              if (opened) throw new Error(opened);
+              result = { ok: true };
+            }
             else if (action.type === 'desktop-pet:open-directory') {
               fs.mkdirSync(userPetDirectory(), { recursive: true });
               const opened = await shell.openPath(userPetDirectory());
@@ -493,6 +530,7 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {}, onPluginAc
 
   function installIpc() {
     handle('desktop-pet:get-state', () => publicState());
+    handle('desktop-pet:set-collapsed', (value) => setChatCollapsed(value));
     handle('desktop-pet:send-message', (message) => sendMessage(message));
     handle('desktop-pet:choose-image', (question) => chooseImage(question));
     handle('desktop-pet:open-settings', () => { openSettings(); return { ok: true }; });
@@ -553,6 +591,7 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {}, onPluginAc
     openSettings,
     settings: settingsPayload,
     updateSettings,
+    prepareVision: async () => { await localVision.prepare(); return localVision.getState(); },
     shouldRunInBackground: () => loadSettings().backgroundOnClose,
     openDirectory: async () => {
       fs.mkdirSync(userPetDirectory(), { recursive: true });

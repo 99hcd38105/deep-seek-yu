@@ -6,9 +6,28 @@ import YAML from 'yaml';
 
 const require = createRequire(import.meta.url);
 const {
-  addAllowedBuilds, approvalFromFailure, ensurePnpmShim, installedPlugins, normalizeRegistry,
+  addAllowedBuilds, approvalFromFailure, checkPluginUpdate, compareVersions, ensurePnpmShim, installedPlugins, normalizeRegistry,
   recommendedInstallSpec, resolveCompatibleInstall, updatePluginEnabled,
 } = require('../extensions-manager');
+
+if (compareVersions('1.2.0', '1.1.9') !== 1 || compareVersions('1.1.2', '1.1.2') !== 0
+  || compareVersions('1.1.2-rc.2', '1.1.2') !== -1) throw new Error('Semantic version comparison is incorrect.');
+const npmUpdate = await checkPluginUpdate({
+  name: '@owner/active', requested: '^1.0.0', version: '1.2.0', installed: true,
+}, { fetchJson: async (url) => {
+  if (!url.includes('registry.npmjs.org')) throw new Error(`Unexpected npm update URL: ${url}`);
+  return { version: '1.3.0' };
+} });
+if (!npmUpdate.updateAvailable || npmUpdate.latestVersion !== '1.3.0') throw new Error(`npm update was not detected: ${JSON.stringify(npmUpdate)}`);
+const githubUpdate = await checkPluginUpdate({
+  name: 'github-plugin', requested: 'github:owner/github-plugin', version: '2.0.0', installed: true,
+}, { fetchJson: async (url) => {
+  if (url.includes('/main/')) return { name: 'github-plugin', version: '2.0.0' };
+  throw new Error('not found');
+} });
+if (githubUpdate.updateAvailable || githubUpdate.latestVersion !== '2.0.0' || githubUpdate.updateSource !== 'GitHub main') {
+  throw new Error(`GitHub current version check is incorrect: ${JSON.stringify(githubUpdate)}`);
+}
 
 const registry = normalizeRegistry({
   verified: {
@@ -127,4 +146,4 @@ try {
   if (yaml.nodeLinker !== 'hoisted') throw new Error('Existing workspace settings were not preserved.');
 } finally { rmSync(fixture, { recursive: true, force: true }); }
 
-process.stdout.write(`extensions manager test passed: registry, API-independent compatibility, repair metadata, enable/disable state, pnpm shim and build approvals verified\n`);
+process.stdout.write(`extensions manager test passed: registry, updates, API-independent compatibility, repair metadata, enable/disable state, pnpm shim and build approvals verified\n`);

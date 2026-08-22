@@ -423,14 +423,17 @@ async function dispatchMobileControl(action) {
   switch (type) {
     case 'desktop-pet:get-settings': return desktopPet?.settings() || {};
     case 'desktop-pet:save-settings': return desktopPet?.updateSettings(action.payload || {}) || {};
+    case 'desktop-pet:prepare-vision': return desktopPet?.prepareVision() || {};
     case 'desktop-pet:show': desktopPet?.show(); return { ok: true };
     case 'desktop-pet:hide': desktopPet?.hide(); return { ok: true };
     case 'desktop-pet:open-directory': await desktopPet?.openDirectory(); return { ok: true };
     case 'extensions:versions':
     case 'extensions:registry':
     case 'extensions:installed':
+    case 'extensions:check-updates':
     case 'extensions:install-runtime':
     case 'extensions:install-plugin':
+    case 'extensions:update-plugin':
     case 'extensions:remove-plugin':
     case 'extensions:repair-plugin':
     case 'extensions:set-plugin-enabled':

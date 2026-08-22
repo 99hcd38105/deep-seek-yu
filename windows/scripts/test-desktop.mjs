@@ -91,12 +91,19 @@ try {
   await pluginPanel.locator('[data-pet="size"]').fill('180');
   await pluginPanel.locator('[data-save-pet]').click();
   await pluginPanel.locator('[data-pet-state]').filter({ hasText: '已保存' }).waitFor({ timeout: 15000 });
+  const visionNavigation = settings.getByRole('button', { name: '本地识图', exact: true });
+  await visionNavigation.click();
+  const visionPanel = settings.locator('#deep-seek-yu-vision-panel');
+  await visionPanel.getByText('使用方法', { exact: true }).waitFor();
+  await visionPanel.getByRole('button', { name: /下载并启用|加载并启用|重新加载/ }).waitFor();
+  if (await pluginPanel.isVisible()) throw new Error('切换本地识图页后 DeepSeek yu 页面没有隐藏。');
   const marketNavigation = settings.getByRole('button', { name: '社区插件', exact: true });
   await marketNavigation.click();
   const marketPanel = settings.locator('#deep-seek-yu-market-panel');
   await marketPanel.getByText('插件市场', { exact: true }).waitFor();
   await marketPanel.getByText('已安装插件', { exact: true }).waitFor();
-  await marketPanel.getByText(/插件可以启用、禁用、修复或卸载/).waitFor();
+  await marketPanel.getByText(/插件可以检查更新、启用、禁用、修复或卸载/).waitFor();
+  await marketPanel.getByRole('button', { name: '检查更新', exact: true }).waitFor();
   await marketPanel.locator('[data-installed-state]').filter({ hasNotText: '正在读取' }).waitFor({ timeout: 15000 });
   if (await pluginPanel.isVisible()) throw new Error('切换社区插件页后 DeepSeek yu 页面没有隐藏。');
 
@@ -112,10 +119,21 @@ try {
 
   const extraWindows = application.windows().filter((window) => window !== mainWindow && !window.url().startsWith('file:'));
   if (extraWindows.length) throw new Error(`Unexpected independent plugin window: ${JSON.stringify(extraWindows.map((window) => window.url()))}`);
+  const petPage = application.windows().find((window) => window.url().endsWith('/pet-window.html'));
+  if (!petPage) throw new Error('Pet window page was not found.');
+  const expandedPetBounds = await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()
+    .find((window) => !window.isDestroyed() && window.getTitle() === 'DeepSeek yu 桌宠')?.getBounds());
+  await petPage.locator('#collapseButton').click();
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  const collapsedPetBounds = await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()
+    .find((window) => !window.isDestroyed() && window.getTitle() === 'DeepSeek yu 桌宠')?.getBounds());
+  if (!expandedPetBounds || !collapsedPetBounds || collapsedPetBounds.width >= expandedPetBounds.width
+    || collapsedPetBounds.height >= expandedPetBounds.height) throw new Error(`Pet collapse did not compact the window: ${JSON.stringify({ expandedPetBounds, collapsedPetBounds })}`);
+  if (process.argv[4]) await petPage.screenshot({ path: process.argv[4], omitBackground: true });
+  await petPage.locator('#collapseButton').click();
+  await new Promise((resolve) => setTimeout(resolve, 400));
   if (process.argv[2]) await mainWindow.screenshot({ path: process.argv[2] });
   if (process.argv[3]) {
-    const petPage = application.windows().find((window) => window.url().endsWith('/pet-window.html'));
-    if (!petPage) throw new Error('Pet window page was not found for visual verification.');
     await petPage.locator('#petImage').waitFor({ state: 'visible', timeout: 15000 });
     await petPage.screenshot({ path: process.argv[3], omitBackground: true });
   }

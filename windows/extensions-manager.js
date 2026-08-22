@@ -43,6 +43,76 @@ function repositoryFromDependency(value) {
   return repositoryName(url);
 }
 
+function normalizedVersion(value) {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(String(value || '').trim());
+  if (!match) return null;
+  return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]), prerelease: match[4] || '' };
+}
+
+function compareVersions(left, right) {
+  const a = normalizedVersion(left);
+  const b = normalizedVersion(right);
+  if (!a || !b) return null;
+  for (const key of ['major', 'minor', 'patch']) {
+    if (a[key] !== b[key]) return a[key] > b[key] ? 1 : -1;
+  }
+  if (a.prerelease === b.prerelease) return 0;
+  if (!a.prerelease) return 1;
+  if (!b.prerelease) return -1;
+  const aParts = a.prerelease.split('.');
+  const bParts = b.prerelease.split('.');
+  for (let index = 0; index < Math.max(aParts.length, bParts.length); index += 1) {
+    if (aParts[index] === undefined) return -1;
+    if (bParts[index] === undefined) return 1;
+    if (aParts[index] === bParts[index]) continue;
+    const aNumber = /^\d+$/.test(aParts[index]) ? Number(aParts[index]) : null;
+    const bNumber = /^\d+$/.test(bParts[index]) ? Number(bParts[index]) : null;
+    if (aNumber !== null && bNumber !== null) return aNumber > bNumber ? 1 : -1;
+    if (aNumber !== null) return -1;
+    if (bNumber !== null) return 1;
+    return aParts[index].localeCompare(bParts[index]) > 0 ? 1 : -1;
+  }
+  return 0;
+}
+
+async function checkPluginUpdate(plugin, { fetchJson }) {
+  const currentVersion = String(plugin?.version || '');
+  if (!plugin?.installed || !normalizedVersion(currentVersion)) {
+    return { ...plugin, updateChecked: true, updateAvailable: false, updateError: '无法识别本地版本' };
+  }
+
+  const dependencyRepo = repositoryFromDependency(plugin.requested);
+  try {
+    let latestVersion = '';
+    let updateSource = '';
+    if (dependencyRepo) {
+      for (const branch of ['main', 'dev', 'master']) {
+        try {
+          const manifest = await fetchJson(`https://raw.githubusercontent.com/${dependencyRepo}/${branch}/package.json`, 30000);
+          if (packageName(manifest?.name) && normalizedVersion(manifest?.version)) {
+            latestVersion = String(manifest.version);
+            updateSource = `GitHub ${branch}`;
+            break;
+          }
+        } catch { /* try the next conventional branch */ }
+      }
+    } else if (packageName(plugin.name)) {
+      const metadata = await fetchJson(`https://registry.npmjs.org/${encodeURIComponent(plugin.name)}/latest`, 30000);
+      latestVersion = String(metadata?.version || '');
+      updateSource = 'npm latest';
+    }
+    if (!normalizedVersion(latestVersion)) {
+      return { ...plugin, updateChecked: true, updateAvailable: false, updateError: '插件源未提供可识别的最新版本' };
+    }
+    return {
+      ...plugin, updateChecked: true, latestVersion, updateSource,
+      updateAvailable: compareVersions(latestVersion, currentVersion) > 0,
+    };
+  } catch (error) {
+    return { ...plugin, updateChecked: true, updateAvailable: false, updateError: cleanProcessError(error?.message || error) };
+  }
+}
+
 function installSpec(plugin) {
   const npmName = packageName(plugin.npm);
   if (npmName) return npmName;
@@ -419,6 +489,22 @@ function createExtensionsManager({ app, mainWindow, runtimeManager, dshHome, onR
     return normalizeRegistry(bundle, warnings.join(' · '));
   }
 
+  async function checkUpdates() {
+    if (operation) throw new Error('已有操作正在进行。');
+    const profileDir = path.join(dshHome(), 'profiles', 'web');
+    const plugins = await Promise.all(installedPlugins(profileDir)
+      .map((plugin) => checkPluginUpdate(plugin, { fetchJson })));
+    return {
+      plugins,
+      counts: {
+        total: plugins.length,
+        available: plugins.filter((plugin) => plugin.updateAvailable).length,
+        current: plugins.filter((plugin) => plugin.updateChecked && !plugin.updateAvailable && !plugin.updateError).length,
+        unavailable: plugins.filter((plugin) => plugin.updateError).length,
+      },
+    };
+  }
+
   async function installRuntime(version) {
     if (operation) throw new Error('已有操作正在进行。');
     const choice = await dialog.showMessageBox(mainWindow, {
@@ -485,6 +571,70 @@ function createExtensionsManager({ app, mainWindow, runtimeManager, dshHome, onR
       }
       onRestartRequired();
       return { ok: true, restartRequired: true, active: true, packageName: installed.name, adapted: compatible.adapted };
+    } finally { operation = null; }
+  }
+
+  async function updatePlugin(name) {
+    if (operation) throw new Error('已有操作正在进行。');
+    const profileDir = path.join(dshHome(), 'profiles', 'web');
+    const current = installedPlugins(profileDir).find((item) => item.name === name);
+    if (!current) throw new Error('该插件不在当前 web profile 中。');
+    const checked = await checkPluginUpdate(current, { fetchJson });
+    if (checked.updateError) throw new Error(`${current.name} 无法检查更新：${checked.updateError}`);
+    if (!checked.updateAvailable) return { ok: true, updated: false, message: `${current.name} 已是最新版本。` };
+
+    const repo = repositoryFromDependency(current.requested) || repositoryName(current.sourceUrl);
+    const githubSpec = repositoryFromDependency(current.requested) ? String(current.requested) : '';
+    const spec = githubSpec || npmInstallSpec(`${current.name}@${checked.latestVersion}`);
+    if (!spec) throw new Error('无法生成安全的插件更新来源。');
+    const sourceUrl = repo ? `https://github.com/${repo}` : `https://www.npmjs.com/package/${encodeURIComponent(current.name)}`;
+    const choice = await dialog.showMessageBox(mainWindow, {
+      type: 'warning', title: '更新 Harness 插件', message: `将 ${current.name} 更新到 ${checked.latestVersion}？`,
+      detail: `当前版本：${current.version}\n最新版本：${checked.latestVersion}\n检查来源：${checked.updateSource}\n安装项：${spec}\n\n更新会运行第三方插件的新代码，并保留当前的“${current.bundle ? '启用' : '禁用'}”状态。`,
+      buttons: ['取消', '查看来源', '更新'], defaultId: 0, cancelId: 0,
+    });
+    if (choice.response === 1) { await shell.openExternal(sourceUrl); return { canceled: true }; }
+    if (choice.response !== 2) return { canceled: true };
+
+    const active = runtimeManager.active();
+    const environment = pluginEnvironment();
+    const updateDescription = { name: current.name, packageName: current.name, repo };
+    const execute = () => runDsh(app, active.entry,
+      ['plugin', '--profile', 'web', 'add', spec, '--reporter=append-only'], environment);
+    operation = execute();
+    try {
+      try { await operation; }
+      catch (error) {
+        const approvals = approvalFromFailure(error.message, updateDescription);
+        if (!approvals.length) throw error;
+        const approval = await dialog.showMessageBox(mainWindow, {
+          type: 'warning', title: '允许更新后的插件运行构建脚本？',
+          message: `${current.name} 的更新需要运行构建脚本`,
+          detail: `只在你确认后，DeepSeek yu 才会为以下包写入 allowBuilds 并自动重试：\n\n${approvals.join('\n')}\n\n构建脚本在 Harness 沙箱外运行，请先查看来源。`,
+          buttons: ['取消更新', '查看来源', '仅允许这些包并重试'], defaultId: 0, cancelId: 0,
+        });
+        if (approval.response === 1) { await shell.openExternal(sourceUrl); return { canceled: true }; }
+        if (approval.response !== 2) return { canceled: true };
+        addAllowedBuilds(profileDir, approvals);
+        operation = execute();
+        await operation;
+      }
+
+      let updated = installedPlugins(profileDir).find((item) => item.name === current.name);
+      if (current.bundleCapable && !current.bundle && updated?.bundle) {
+        updatePluginEnabled(profileDir, current.name, false);
+        updated = installedPlugins(profileDir).find((item) => item.name === current.name);
+      }
+      const changed = compareVersions(updated?.version, current.version) > 0;
+      if (current.bundle && changed) onRestartRequired();
+      return {
+        ok: true, updated: changed, name: current.name,
+        previousVersion: current.version, version: updated?.version || current.version,
+        restartRequired: Boolean(current.bundle && changed),
+        message: changed
+          ? `${current.name} 已更新到 ${updated.version}${current.bundle ? '，请重启 DeepSeek yu。' : '；插件保持禁用。'}`
+          : `${current.name} 的插件源没有安装出比 ${current.version} 更新的版本。`,
+      };
     } finally { operation = null; }
   }
 
@@ -556,8 +706,10 @@ function createExtensionsManager({ app, mainWindow, runtimeManager, dshHome, onR
       case 'extensions:versions': return runtimeManager.versions();
       case 'extensions:registry': return registry();
       case 'extensions:installed': return { plugins: installedPlugins(path.join(dshHome(), 'profiles', 'web')) };
+      case 'extensions:check-updates': return checkUpdates();
       case 'extensions:install-runtime': return installRuntime(String(action.payload?.version || ''));
       case 'extensions:install-plugin': return installPlugin(action.payload?.plugin || {});
+      case 'extensions:update-plugin': return updatePlugin(String(action.payload?.name || ''));
       case 'extensions:remove-plugin': return removePlugin(String(action.payload?.name || ''));
       case 'extensions:repair-plugin': return repairPlugin(String(action.payload?.name || ''));
       case 'extensions:set-plugin-enabled': return setPluginEnabled(String(action.payload?.name || ''), Boolean(action.payload?.enabled));
@@ -578,7 +730,7 @@ function createExtensionsManager({ app, mainWindow, runtimeManager, dshHome, onR
 }
 
 module.exports = {
-  addAllowedBuilds, approvalFromFailure, createExtensionsManager, ensurePnpmShim,
+  addAllowedBuilds, approvalFromFailure, checkPluginUpdate, compareVersions, createExtensionsManager, ensurePnpmShim,
   installSpec, installedPlugins, normalizeRegistry, normalizeLive, normalizeMarket, normalizeVerified,
   recommendedInstallSpec, resolveCompatibleInstall, updatePluginEnabled,
 };

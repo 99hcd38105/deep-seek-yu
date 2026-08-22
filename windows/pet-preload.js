@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('desktopPet', {
   getState: () => ipcRenderer.invoke('desktop-pet:get-state'),
+  setCollapsed: (value) => ipcRenderer.invoke('desktop-pet:set-collapsed', value),
   sendMessage: (message) => ipcRenderer.invoke('desktop-pet:send-message', message),
   chooseImage: (question) => ipcRenderer.invoke('desktop-pet:choose-image', question),
   openSettings: () => ipcRenderer.invoke('desktop-pet:open-settings'),
