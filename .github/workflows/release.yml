@@ -48,14 +48,38 @@ jobs:
 
       - name: Install Windows dependencies
         shell: pwsh
+        env:
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
         run: npm ci --prefix windows
+
+      - name: Prepare Electron runtime
+        shell: pwsh
+        env:
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+        run: |
+          $electronExecutable = 'windows\node_modules\electron\dist\electron.exe'
+          if (-not (Test-Path $electronExecutable)) {
+            Push-Location windows
+            try {
+              node node_modules\electron\install.js
+              if ($LASTEXITCODE -ne 0) {
+                throw "Electron runtime installer exited with code $LASTEXITCODE"
+              }
+            } finally {
+              Pop-Location
+            }
+          }
+          if (-not (Test-Path $electronExecutable)) {
+            throw "Electron runtime was not prepared at $electronExecutable"
+          }
+          & $electronExecutable --version
 
       - name: Build Windows installer
         shell: pwsh
         env:
           ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
           ELECTRON_BUILDER_BINARIES_MIRROR: https://npmmirror.com/mirrors/electron-builder-binaries/
-        run: npm run installer --prefix windows
+        run: npm run installer --prefix windows -- --publish never
 
       - name: Prepare release files
         shell: pwsh
@@ -79,13 +103,25 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          $tag = $env:GITHUB_REF_NAME
           $releaseFiles = Get-ChildItem -Path release -File | ForEach-Object { $_.FullName }
-          $arguments = @($env:GITHUB_REF_NAME) + @($releaseFiles) + @(
-            '--verify-tag',
-            '--generate-notes',
-            '--title', "DeepSeek yu $env:GITHUB_REF_NAME"
-          )
-          if ($env:GITHUB_REF_NAME -match '-') {
-            $arguments += '--prerelease'
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag @releaseFiles --clobber
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to replace assets on existing release $tag"
+            }
+          } else {
+            $arguments = @($tag) + @($releaseFiles) + @(
+              '--verify-tag',
+              '--generate-notes',
+              '--title', "DeepSeek yu $tag"
+            )
+            if ($tag -match '-') {
+              $arguments += '--prerelease'
+            }
+            gh release create @arguments
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to create release $tag"
+            }
           }
-          gh release create @arguments
