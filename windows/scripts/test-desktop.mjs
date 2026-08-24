@@ -82,7 +82,7 @@ try {
   await pluginPanel.getByText('桌宠', { exact: true }).waitFor();
   await pluginPanel.getByText('余额与服务状态', { exact: true }).waitFor();
   await pluginPanel.getByText('DeepSeek Harness 更新', { exact: true }).waitFor();
-  await pluginPanel.getByRole('button', { name: '检查更新', exact: true }).waitFor();
+  await pluginPanel.getByRole('button', { name: '重新核对官方版本', exact: true }).waitFor();
   await pluginPanel.getByRole('button', { name: /更新到|已是最新版/ }).waitFor();
   await pluginPanel.getByRole('button', { name: /安装所选版本|当前版本/ }).waitFor();
   if (await pluginPanel.getByText('插件市场', { exact: true }).count()) throw new Error('社区插件市场不应继续混在 DeepSeek yu 页面中。');
@@ -91,6 +91,9 @@ try {
   if (mixedNativePage) throw new Error('DeepSeek yu 页面仍与上一次打开的官方设置页混合显示。');
   await pluginPanel.locator('[data-pet-state]').filter({ hasNotText: '正在读取' }).waitFor({ timeout: 15000 });
   await pluginPanel.locator('[data-runtime-state]').filter({ hasText: '0.1.1-rc.2' }).waitFor({ timeout: 45000 });
+  await pluginPanel.locator('[data-runtime-history]').filter({ hasText: /最近发布|联网后/ }).waitFor({ timeout: 45000 });
+  await pluginPanel.getByText('查看全部历史版本', { exact: true }).click();
+  await pluginPanel.locator('[data-runtime-history-list]').filter({ hasNotText: '正在读取' }).waitFor({ timeout: 45000 });
   await pluginPanel.locator('[data-pet="size"]').fill('180');
   await pluginPanel.locator('[data-save-pet]').click();
   await pluginPanel.locator('[data-pet-state]').filter({ hasText: '已保存' }).waitFor({ timeout: 15000 });

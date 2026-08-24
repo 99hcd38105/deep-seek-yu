@@ -105,12 +105,19 @@ function createHarnessRuntimeManager({ app, resolveProxy = async () => '' }) {
       });
       if (!response.ok) throw new Error(`官方 npm 版本目录返回 ${response.status}`);
       const registry = await response.json();
-      const available = Object.keys(registry.versions || {}).filter((value) => parseVersion(value))
-        .filter((value) => compareVersions(value, '0.1.1-rc.2') >= 0).sort(compareVersions).reverse();
+      const publishedVersions = Object.keys(registry.versions || {}).filter((value) => parseVersion(value))
+        .sort(compareVersions).reverse();
+      const available = publishedVersions
+        .filter((value) => compareVersions(value, '0.1.1-rc.2') >= 0);
+      const taggedVersions = Object.values(registry['dist-tags'] || {}).filter((value) => parseVersion(value));
+      const latest = [...taggedVersions, ...publishedVersions].sort(compareVersions).reverse()[0] || local.bundled;
       return {
         ...local,
-        latest: registry['dist-tags']?.latest || available[0] || local.bundled,
+        latest,
         versions: [...new Set([local.active, local.bundled, ...available])].slice(0, 30),
+        publishedVersions: publishedVersions.slice(0, 30),
+        distTags: registry['dist-tags'] || {},
+        checkedAt: new Date().toISOString(),
         source: REGISTRY_URL,
       };
     } catch (error) {
@@ -118,6 +125,9 @@ function createHarnessRuntimeManager({ app, resolveProxy = async () => '' }) {
         ...local,
         latest: local.bundled,
         versions: [...new Set([local.active, local.bundled])],
+        publishedVersions: [],
+        distTags: {},
+        checkedAt: new Date().toISOString(),
         source: REGISTRY_URL,
         warning: `暂时无法连接官方版本目录：${String(error?.message || error).slice(0, 120)}`,
       };

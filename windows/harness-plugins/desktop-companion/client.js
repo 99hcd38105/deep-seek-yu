@@ -215,7 +215,7 @@
       <div class="dsy-grid">
         <section class="dsy-card" data-card="pet"><h4>桌宠</h4><div class="dsy-muted">桌宠在电脑桌面显示 Harness 思考、命令和对话进度。</div><div class="dsy-checks"><label><input type="checkbox" data-pet="enabled"> 启用桌宠</label><label><input type="checkbox" data-pet="alwaysOnTop"> 始终置顶</label><label><input type="checkbox" data-pet="showStatus"> 显示状态</label><label><input type="checkbox" data-pet="showChatPanel"> 显示聊天框</label><label><input type="checkbox" data-pet="backgroundOnClose"> 关闭主窗口后在后台</label></div><div class="dsy-row"><label>大小 <input class="dsy-range" data-pet="size" type="range" min="160" max="360" step="10"> <span data-size-value></span></label><div class="dsy-actions"><button class="dsy-button" data-open-pets>${mobileClient ? '打开电脑桌宠目录' : '添加桌宠'}</button><button class="dsy-button primary" data-save-pet>保存</button></div></div><div class="dsy-state" data-pet-state>正在读取…</div></section>
         <section class="dsy-card" data-card="account"><h4>余额与服务状态</h4><div class="dsy-muted">API Key 只由 Harness 后端读取，不会显示在页面。</div><div data-balance class="dsy-balance">正在读取…</div><div data-account-detail class="dsy-state"></div><button class="dsy-button" data-refresh-account>刷新</button></section>
-        <section class="dsy-card wide" data-card="runtime"><h4>DeepSeek Harness 更新</h4><div class="dsy-muted">检查并安装 DeepSeek 官方 npm 命名空间中的 Harness 运行时；不会更新社区插件。</div><div class="dsy-row"><div data-runtime-state>正在读取版本…</div><div class="dsy-actions"><button class="dsy-button" data-check-runtime>检查更新</button><select class="dsy-select" data-runtime-versions></select><button class="dsy-button" data-install-runtime>安装所选版本</button><button class="dsy-button primary" data-update-runtime>更新到最新版</button></div></div></section>
+        <section class="dsy-card wide" data-card="runtime"><h4>DeepSeek Harness 更新</h4><div class="dsy-muted">直接核对 DeepSeek 官方 npm 发布目录。版本按完整编号比较，例如 0.1.1-rc.2 新于 0.1.0-rc.8；这里不更新 DeepSeek yu 或社区插件。</div><div class="dsy-row"><div><div data-runtime-state>正在读取版本…</div><div class="dsy-muted" data-runtime-history></div></div><div class="dsy-actions"><button class="dsy-button" data-check-runtime>重新核对官方版本</button><select class="dsy-select" data-runtime-versions></select><button class="dsy-button" data-install-runtime>安装所选版本</button><button class="dsy-button primary" data-update-runtime>更新到最新版</button></div></div><details data-runtime-history-details style="margin-top:12px"><summary style="cursor:pointer">查看全部历史版本</summary><div class="dsy-state" data-runtime-history-list>正在读取…</div></details></section>
       </div>`;
 
     const stateText = (selector, text, error = false) => {
@@ -272,9 +272,26 @@
       try {
         const value = await request('extensions:versions');
         runtimeCatalog = value;
-        panel.querySelector('[data-runtime-versions]').innerHTML = value.versions.map((version) => `<option${version === value.active ? ' selected' : ''}>${escapeHtml(version)}</option>`).join('');
+        const installable = new Set(value.versions || []);
+        const displayedVersions = [...new Set([value.active, ...(value.publishedVersions || []), ...(value.versions || [])])];
+        panel.querySelector('[data-runtime-versions]').innerHTML = displayedVersions.map((version) => {
+          const current = version === value.active;
+          const latest = version === value.latest;
+          const supported = installable.has(version);
+          const suffix = [current ? '当前' : '', latest ? '最新' : '', !supported ? '历史版本，仅查看' : ''].filter(Boolean).join('、');
+          return `<option value="${escapeHtml(version)}"${current ? ' selected' : ''}${!supported ? ' disabled' : ''}>${escapeHtml(version)}${suffix ? `（${suffix}）` : ''}</option>`;
+        }).join('');
         const upToDate = value.active === value.latest;
+        const tagSummary = Object.entries(value.distTags || {}).map(([tag, version]) => `${tag}=${version}`).join('、');
+        const checkedTime = value.checkedAt ? new Date(value.checkedAt).toLocaleString('zh-CN', { hour12: false }) : '';
         stateText('[data-runtime-state]', `当前 ${value.active}（${value.activeMode === 'bundled' ? '客户端内置' : '已下载官方版'}）· 官方最新 ${value.latest}${value.warning ? ` · ${value.warning}` : announce ? (upToDate ? ' · 已是最新版' : ' · 发现可用更新') : ''}`, Boolean(value.warning));
+        const history = (value.publishedVersions || []).slice(0, 4).join(' > ');
+        stateText('[data-runtime-history]', value.warning ? '当前显示的是本机内置版本，联网后可重新核对。' : `官方标签：${tagSummary || '无'} · 最近发布：${history || value.latest}${checkedTime ? ` · 核对时间 ${checkedTime}` : ''}`);
+        const historyList = (value.publishedVersions || []).map((version) => {
+          const labels = [version === value.latest ? '最新版' : '', version === value.active ? '当前使用' : '', installable.has(version) ? '兼容安装' : '历史记录'].filter(Boolean);
+          return `${version}${labels.length ? `（${labels.join('、')}）` : ''}`;
+        }).join('　·　');
+        stateText('[data-runtime-history-list]', historyList || '联网后显示 DeepSeek 官方完整发布历史。');
         syncRuntimeButtons();
       } catch (error) { stateText('[data-runtime-state]', error.message, true); }
     };
@@ -282,7 +299,7 @@
     panel.querySelector('[data-check-runtime]').addEventListener('click', async (event) => {
       const button = event.currentTarget; button.disabled = true; button.textContent = '检查中…';
       try { await loadVersions(true); }
-      finally { button.disabled = false; button.textContent = '检查更新'; }
+      finally { button.disabled = false; button.textContent = '重新核对官方版本'; }
     });
     panel.querySelector('[data-install-runtime]').addEventListener('click', async (event) => {
       const button = event.currentTarget; const original = button.textContent; button.disabled = true; button.textContent = '安装中…';
