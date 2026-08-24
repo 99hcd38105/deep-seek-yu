@@ -132,9 +132,14 @@ try {
   if (extraWindows.length) throw new Error(`Unexpected independent plugin window: ${JSON.stringify(extraWindows.map((window) => window.url()))}`);
   const petPage = application.windows().find((window) => window.url().endsWith('/pet-window.html'));
   if (!petPage) throw new Error('Pet window page was not found.');
+  await petPage.locator('#menuButton').waitFor({ state: 'visible' });
+  const defaultMenuPointerEvents = await petPage.locator('#actionMenu').evaluate((element) => getComputedStyle(element).pointerEvents);
+  if (defaultMenuPointerEvents !== 'none') throw new Error('桌宠操作菜单默认应保持收起。');
+  await petPage.locator('#menuButton').click();
   await petPage.locator('#feedButton').waitFor({ state: 'visible' });
   await petPage.locator('#playButton').waitFor({ state: 'visible' });
   await petPage.getByText('Lv.1 初次相遇', { exact: true }).waitFor({ state: 'visible' });
+  await petPage.locator('#menuButton').click();
   const expandedPetBounds = await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()
     .find((window) => !window.isDestroyed() && window.getTitle() === 'DeepSeek yu 桌宠')?.getBounds());
   await petPage.locator('#collapseButton').click();
