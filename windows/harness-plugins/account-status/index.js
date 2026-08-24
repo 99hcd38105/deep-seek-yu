@@ -7,6 +7,26 @@ export const Config = z.object({ enabled: z.boolean().default(true) });
 let cache = null;
 let cacheAt = 0;
 
+export function pricingPeriodAt(date = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Shanghai',
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date).filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
+  const weekday = !['Sat', 'Sun'].includes(parts.weekday);
+  const peak = weekday && ((minutes >= 9 * 60 && minutes < 12 * 60) || (minutes >= 14 * 60 && minutes < 18 * 60));
+  return {
+    period: peak ? 'peak' : 'off-peak',
+    label: peak ? '高峰时段' : '空闲时段',
+    priceHint: peak ? '当前按高峰价格计费' : '当前按空闲价格计费',
+    schedule: '工作日 09:00–12:00、14:00–18:00（北京时间）',
+    checkedAt: date.toISOString(),
+  };
+}
+
 function sendJson(res, status, value) {
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
@@ -47,6 +67,7 @@ async function loadState(ctx) {
     service: { indicator: 'unknown', description: '状态暂不可用', apiStatus: 'unknown' },
     latencyMs: null,
     observed: 'unknown',
+    pricing: pricingPeriodAt(),
   };
   try {
     const status = await requestJson('https://status.deepseek.com/api/v2/summary.json', {}, 7000);

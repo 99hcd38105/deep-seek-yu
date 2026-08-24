@@ -721,7 +721,9 @@ function createWindow() {
   });
 }
 
-const gotLock = app.requestSingleInstanceLock();
+// Automated packaged-app tests use an isolated user-data directory and must not
+// steal focus from, or terminate, the user's already running installed client.
+const gotLock = process.env.DSH_TEST_USER_DATA ? true : app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {

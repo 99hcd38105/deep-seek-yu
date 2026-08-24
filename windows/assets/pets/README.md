@@ -12,7 +12,12 @@
     "thinking": "thinking.png",
     "executing": "executing.png",
     "success": "success.png",
-    "error": "error.png"
+    "error": "error.png",
+    "dragging": "dragging.png",
+    "feeding": "feeding.png",
+    "levelup": "levelup.png",
+    "playing": "playing.png",
+    "sleeping": "sleeping.png"
   }
 }
 ```

@@ -111,6 +111,15 @@ jobs:
             if ($LASTEXITCODE -ne 0) {
               throw "Failed to replace assets on existing release $tag"
             }
+            $channel = (Get-Content -Raw windows/package.json | ConvertFrom-Json).releaseChannel
+            if ($tag -match '-' -or $channel -in @('beta', 'test', 'prerelease')) {
+              gh release edit $tag --prerelease
+            } else {
+              gh release edit $tag --prerelease=false --latest
+            }
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to update release channel for $tag"
+            }
           } else {
             $arguments = @($tag) + @($releaseFiles) + @(
               '--verify-tag',

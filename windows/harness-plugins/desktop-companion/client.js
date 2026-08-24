@@ -204,6 +204,7 @@
     .dsy-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin:4px 0 16px}.dsy-head h3{font-size:18px;margin:0}.dsy-head p{margin:3px 0 0;color:var(--dsw-alias-label-tertiary,#64748b)}
     .dsy-version{flex:none;border:1px solid var(--dsw-alias-border-l2,#dbe2ea);border-radius:999px;padding:3px 9px;font-size:12px;color:var(--dsw-alias-label-secondary,#475569)}
     .dsy-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.dsy-card{border:1px solid var(--dsw-alias-border-l2,#e2e8f0);border-radius:14px;padding:16px;background:var(--dsw-alias-bg-layer-1,#fff);min-width:0}.dsy-card.wide{grid-column:1/-1}.dsy-card h4{font-size:15px;margin:0 0 4px}.dsy-muted{color:var(--dsw-alias-label-tertiary,#64748b);font-size:12px}.dsy-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px}.dsy-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.dsy-checks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 14px;margin-top:12px}.dsy-checks label{display:flex;align-items:center;gap:7px}.dsy-button{height:34px;border:1px solid var(--dsw-alias-border-l2,#cbd5e1);border-radius:17px;padding:0 13px;background:transparent;color:inherit;cursor:pointer}.dsy-button.primary{border:0;background:var(--dsw-alias-button-primary-fill,#111827);color:var(--dsw-alias-label-primary-foreground,#fff)}.dsy-button:disabled{opacity:.5;cursor:wait}.dsy-select,.dsy-input{height:34px;border:1px solid var(--dsw-alias-border-l2,#cbd5e1);border-radius:8px;padding:0 9px;background:var(--dsw-alias-bg-layer-1,#fff);color:inherit}.dsy-input{width:100%}.dsy-range{width:150px}.dsy-state{margin-top:10px;min-height:19px;color:var(--dsw-alias-label-secondary,#475569)}.dsy-error{color:var(--dsw-alias-state-error-primary,#dc2626);white-space:pre-wrap;overflow-wrap:anywhere}.dsy-good{color:var(--dsw-alias-state-success-primary,#16a34a)}.dsy-warning{margin-top:12px;padding:9px 11px;border-radius:9px;background:#fff7ed;color:#9a3412;font-size:12px}.dsy-market-list{display:grid;gap:8px;margin-top:10px;max-height:360px;overflow:auto}.dsy-plugin{border-top:1px solid var(--dsw-alias-border-l2,#e2e8f0);padding:10px 2px}.dsy-plugin:first-child{border-top:0}.dsy-plugin-head{display:flex;justify-content:space-between;gap:12px}.dsy-plugin-title{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.dsy-plugin strong{overflow-wrap:anywhere}.dsy-plugin p{margin:4px 0}.dsy-badge{display:inline-flex;align-items:center;height:20px;border-radius:999px;padding:0 7px;background:#eef2ff;color:#3730a3;font-size:10px;font-weight:650}.dsy-badge.official{background:#e8f7ee;color:#167044}.dsy-badge.unverified{background:#fff7ed;color:#9a3412}.dsy-badge.source{background:var(--dsw-alias-bg-layer-2,#f1f5f9);color:var(--dsw-alias-label-secondary,#475569);font-weight:500}.dsy-balance{font-size:21px;font-weight:700;margin-top:8px}
+    .dsy-balance-row{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:8px}.dsy-balance-row .dsy-balance{margin-top:0}.dsy-peak{display:inline-flex;align-items:center;height:24px;border-radius:999px;padding:0 9px;font-size:11px;font-weight:700;background:#e0f2fe;color:#075985}.dsy-peak.peak{background:#fff7ed;color:#c2410c}.dsy-progress{height:7px;border-radius:999px;background:var(--dsw-alias-bg-layer-2,#eef2f7);overflow:hidden;margin-top:7px}.dsy-progress>i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#38bdf8,#4f46e5)}
     @media(max-width:760px){.dsy-grid{grid-template-columns:1fr}.dsy-card.wide{grid-column:auto}.dsy-checks{grid-template-columns:1fr}.dsy-row{align-items:flex-start;flex-direction:column}}
   `;
 
@@ -211,10 +212,10 @@
     if (panel.dataset.ready === 'true') return;
     panel.dataset.ready = 'true';
     panel.innerHTML = `
-      <div class="dsy-head"><div><h3>DeepSeek yu</h3><p>${mobileClient ? '连接电脑端 Harness，设置会同步并在电脑上立即生效。' : 'Harness 内部插件功能，设置直接保存到本机。'}</p></div><span class="dsy-version">v1.1.3 测试版</span></div>
+      <div class="dsy-head"><div><h3>DeepSeek yu</h3><p>${mobileClient ? '连接电脑端 Harness，设置会同步并在电脑上立即生效。' : 'Harness 内部插件功能，设置直接保存到本机。'}</p></div><span class="dsy-version">v1.1.3 正式版</span></div>
       <div class="dsy-grid">
-        <section class="dsy-card" data-card="pet"><h4>桌宠</h4><div class="dsy-muted">桌宠在电脑桌面显示 Harness 思考、命令和对话进度。</div><div class="dsy-checks"><label><input type="checkbox" data-pet="enabled"> 启用桌宠</label><label><input type="checkbox" data-pet="alwaysOnTop"> 始终置顶</label><label><input type="checkbox" data-pet="showStatus"> 显示状态</label><label><input type="checkbox" data-pet="showChatPanel"> 显示聊天框</label><label><input type="checkbox" data-pet="backgroundOnClose"> 关闭主窗口后在后台</label></div><div class="dsy-row"><label>大小 <input class="dsy-range" data-pet="size" type="range" min="160" max="360" step="10"> <span data-size-value></span></label><div class="dsy-actions"><button class="dsy-button" data-open-pets>${mobileClient ? '打开电脑桌宠目录' : '添加桌宠'}</button><button class="dsy-button primary" data-save-pet>保存</button></div></div><div class="dsy-state" data-pet-state>正在读取…</div></section>
-        <section class="dsy-card" data-card="account"><h4>余额与服务状态</h4><div class="dsy-muted">API Key 只由 Harness 后端读取，不会显示在页面。</div><div data-balance class="dsy-balance">正在读取…</div><div data-account-detail class="dsy-state"></div><button class="dsy-button" data-refresh-account>刷新</button></section>
+        <section class="dsy-card" data-card="pet"><h4>桌宠</h4><div class="dsy-muted">会呼吸、工作、睡觉、玩耍和成长；完成工作获得小鱼干。</div><div class="dsy-checks"><label><input type="checkbox" data-pet="enabled"> 启用桌宠</label><label><input type="checkbox" data-pet="alwaysOnTop"> 始终置顶</label><label><input type="checkbox" data-pet="showStatus"> 显示状态</label><label><input type="checkbox" data-pet="showChatPanel"> 显示聊天框</label><label><input type="checkbox" data-pet="dynamicActions"> 动态拟人动作</label><label><input type="checkbox" data-pet="eatDroppedFiles"> 拖入文件时吃掉</label><label><input type="checkbox" data-pet="backgroundOnClose"> 关闭主窗口后在后台</label></div><div class="dsy-row"><label>大小 <input class="dsy-range" data-pet="size" type="range" min="160" max="360" step="10"> <span data-size-value></span></label><div class="dsy-actions"><button class="dsy-button" data-open-pets>${mobileClient ? '打开电脑桌宠目录' : '添加桌宠'}</button><button class="dsy-button primary" data-save-pet>保存</button></div></div><div class="dsy-state" data-pet-state>正在读取…</div><div class="dsy-progress"><i data-growth-bar style="width:0"></i></div><div class="dsy-muted" data-growth-detail></div></section>
+        <section class="dsy-card" data-card="account"><h4>余额与服务状态</h4><div class="dsy-muted">API Key 只由 Harness 后端读取，不会显示在页面。</div><div class="dsy-balance-row"><div data-balance class="dsy-balance">正在读取…</div><span data-peak class="dsy-peak" hidden></span></div><div data-account-detail class="dsy-state"></div><div class="dsy-actions"><button class="dsy-button" data-refresh-account>刷新</button><label><input type="checkbox" data-account-show-peak> 显示峰谷时段</label></div><div class="dsy-muted" data-peak-detail></div></section>
         <section class="dsy-card wide" data-card="runtime"><h4>DeepSeek Harness 更新</h4><div class="dsy-muted">直接核对 DeepSeek 官方 npm 发布目录。版本按完整编号比较，例如 0.1.1-rc.2 新于 0.1.0-rc.8；这里不更新 DeepSeek yu 或社区插件。</div><div class="dsy-row"><div><div data-runtime-state>正在读取版本…</div><div class="dsy-muted" data-runtime-history></div></div><div class="dsy-actions"><button class="dsy-button" data-check-runtime>重新核对官方版本</button><select class="dsy-select" data-runtime-versions></select><button class="dsy-button" data-install-runtime>安装所选版本</button><button class="dsy-button primary" data-update-runtime>更新到最新版</button></div></div><details data-runtime-history-details style="margin-top:12px"><summary style="cursor:pointer">查看全部历史版本</summary><div class="dsy-state" data-runtime-history-list>正在读取…</div></details></section>
       </div>`;
 
@@ -223,13 +224,19 @@
       element.textContent = text;
       element.classList.toggle('dsy-error', error);
     };
+    let currentPetSettings = { showPeakStatus: true };
     const loadPet = async () => {
       try {
         const value = await request('desktop-pet:get-settings');
-        for (const name of ['enabled', 'alwaysOnTop', 'showStatus', 'showChatPanel', 'backgroundOnClose']) panel.querySelector(`[data-pet="${name}"]`).checked = value.settings[name] !== false;
+        currentPetSettings = value.settings;
+        for (const name of ['enabled', 'alwaysOnTop', 'showStatus', 'showChatPanel', 'dynamicActions', 'eatDroppedFiles', 'backgroundOnClose']) panel.querySelector(`[data-pet="${name}"]`).checked = value.settings[name] !== false;
+        panel.querySelector('[data-account-show-peak]').checked = value.settings.showPeakStatus !== false;
         panel.querySelector('[data-pet="size"]').value = value.settings.size;
         panel.querySelector('[data-size-value]').textContent = `${value.settings.size}px`;
-        stateText('[data-pet-state]', `当前：${value.characters.find((item) => item.id === value.settings.characterId)?.name || '默认桌宠'}`);
+        const growth = value.progress?.growth || {};
+        panel.querySelector('[data-growth-bar]').style.width = `${growth.percent ?? 0}%`;
+        stateText('[data-pet-state]', `当前：${value.characters.find((item) => item.id === value.settings.characterId)?.name || '默认桌宠'} · 🐟 ${value.progress?.fish || 0} · Lv.${growth.number || 1} ${growth.name || '初次相遇'}`);
+        stateText('[data-growth-detail]', growth.nextMinimum == null ? `已达到最高阶段「${growth.title || growth.name}」` : `经验 ${value.progress?.experience || 0}/${growth.nextMinimum} · 下一阶段「${growth.nextName}」`);
       } catch (error) { stateText('[data-pet-state]', error.message, true); }
     };
     panel.querySelector('[data-pet="size"]').addEventListener('input', (event) => { panel.querySelector('[data-size-value]').textContent = `${event.target.value}px`; });
@@ -237,7 +244,7 @@
       const button = event.currentTarget; button.disabled = true;
       try {
         const settings = {};
-        for (const name of ['enabled', 'alwaysOnTop', 'showStatus', 'showChatPanel', 'backgroundOnClose']) settings[name] = panel.querySelector(`[data-pet="${name}"]`).checked;
+        for (const name of ['enabled', 'alwaysOnTop', 'showStatus', 'showChatPanel', 'dynamicActions', 'eatDroppedFiles', 'backgroundOnClose']) settings[name] = panel.querySelector(`[data-pet="${name}"]`).checked;
         settings.size = Number(panel.querySelector('[data-pet="size"]').value);
         await request('desktop-pet:save-settings', settings);
         stateText('[data-pet-state]', '已保存并立即应用。');
@@ -251,11 +258,22 @@
         const value = await response.json();
         if (!response.ok) throw new Error(value.error || `HTTP ${response.status}`);
         panel.querySelector('[data-balance]').textContent = value.balances?.length ? value.balances.map((item) => `${item.totalBalance} ${item.currency}`).join(' / ') : (value.configured ? '暂无余额数据' : '未配置 DeepSeek API Key');
+        const showPeak = panel.querySelector('[data-account-show-peak]').checked;
+        const peak = panel.querySelector('[data-peak]');
+        peak.hidden = !showPeak;
+        peak.textContent = value.pricing?.label || '峰谷未知';
+        peak.classList.toggle('peak', value.pricing?.period === 'peak');
+        stateText('[data-peak-detail]', showPeak ? `${value.pricing?.priceHint || ''} · ${value.pricing?.schedule || ''}` : '峰谷时段显示已关闭');
         const observed = { smooth: '顺畅', busy: '较忙', congested: '拥堵', offline: '不可达', error: '异常', unknown: '未知' }[value.observed] || value.observed;
         stateText('[data-account-detail]', `API ${value.available ? '可用' : '不可用'} · ${value.service?.description || '状态未知'} · 本机观测 ${observed}${value.latencyMs == null ? '' : `（${value.latencyMs} ms）`}`);
       } catch (error) { panel.querySelector('[data-balance]').textContent = '暂不可用'; stateText('[data-account-detail]', error.message, true); }
     };
     panel.querySelector('[data-refresh-account]').addEventListener('click', loadAccount);
+    panel.querySelector('[data-account-show-peak]').addEventListener('change', async (event) => {
+      currentPetSettings.showPeakStatus = event.target.checked;
+      try { await request('desktop-pet:save-settings', { showPeakStatus: event.target.checked }); await loadAccount(); }
+      catch (error) { stateText('[data-account-detail]', error.message, true); }
+    });
 
     let runtimeCatalog = null;
     const syncRuntimeButtons = () => {
@@ -316,7 +334,7 @@
       finally { button.disabled = false; syncRuntimeButtons(); }
     });
 
-    loadPet(); loadAccount(); loadVersions();
+    loadPet().finally(loadAccount); loadVersions();
   };
 
   const renderVisionPanel = (panel) => {
@@ -364,7 +382,7 @@
     if (panel.dataset.ready === 'true') return;
     panel.dataset.ready = 'true';
     panel.innerHTML = `
-      <div class="dsy-head"><div><h3>社区插件</h3><p>发现、验证、安装和卸载当前 web profile 的 Harness 插件。</p></div><span class="dsy-version">v1.1.3 测试版</span></div>
+      <div class="dsy-head"><div><h3>社区插件</h3><p>发现、验证、安装和卸载当前 web profile 的 Harness 插件。</p></div><span class="dsy-version">v1.1.3 正式版</span></div>
       <div class="dsy-grid">
         <section class="dsy-card wide"><div class="dsy-row" style="margin-top:0"><div><h4>已安装插件</h4><div class="dsy-muted">插件可以检查更新、启用、禁用、修复或卸载；挂载状态在重启 DeepSeek yu 后生效。</div></div><div class="dsy-actions"><button class="dsy-button" data-refresh-installed>刷新</button><button class="dsy-button primary" data-check-updates>检查更新</button></div></div><div data-installed-state class="dsy-state">正在读取…</div><div data-installed-list class="dsy-market-list"></div></section>
         <section class="dsy-card wide"><h4>插件市场</h4><div class="dsy-warning">聚合已验证目录、DSH Market 与 GitHub 的 dsh-plugin Topic。安装前会检查仓库根包；如果仓库是插件集合，会尝试按 README 改用真正可挂载的 npm 包。第三方插件可访问文件、命令和网络，请先查看源码。</div><div class="dsy-row"><input class="dsy-input" data-market-search placeholder="搜索插件名、仓库或标签"><div class="dsy-actions"><button class="dsy-button" data-open-topic>打开 GitHub Topic</button><button class="dsy-button primary" data-load-market>加载全部插件</button></div></div><div data-market-state class="dsy-state">点击“加载全部插件”聚合三个插件来源。</div><div data-market-list class="dsy-market-list"></div></section>

@@ -5,9 +5,17 @@ const { pathToFileURL } = require('node:url');
 const { createLocalVision } = require('./local-vision');
 
 const SETTINGS_FILE = 'desktop-pet.json';
+const PROGRESS_FILE = 'desktop-pet-progress.json';
 const LEGACY_VISION_CREDENTIALS_FILE = 'doubao-vision-credentials.json';
-const SETTINGS_VERSION = 2;
-const ACTION_NAMES = ['idle', 'thinking', 'executing', 'success', 'error'];
+const SETTINGS_VERSION = 3;
+const PROGRESS_VERSION = 1;
+const ACTION_NAMES = ['idle', 'thinking', 'executing', 'success', 'error', 'dragging', 'feeding', 'levelup', 'playing', 'sleeping'];
+const GROWTH_STAGES = [
+  { minimum: 0, name: '初次相遇', title: '小小鲸灵' },
+  { minimum: 30, name: '熟悉伙伴', title: '贴心助手' },
+  { minimum: 100, name: '亲密搭档', title: '鲸灵管家' },
+  { minimum: 260, name: '心意相通', title: '深海守护者' },
+];
 const IMAGE_MIME = new Map([
   ['.png', 'image/png'],
   ['.jpg', 'image/jpeg'],
@@ -21,6 +29,11 @@ const STATUS_TEXT = {
   executing: '正在执行命令…',
   success: '完成啦',
   error: '遇到问题了',
+  dragging: '要带我去哪里呀？',
+  feeding: '小鱼干真好吃！',
+  levelup: '我们的关系更近啦！',
+  playing: '一起玩一会儿吧！',
+  sleeping: '嘘…正在打盹',
 };
 
 function clamp(value, minimum, maximum) {
@@ -59,6 +72,9 @@ function normalizeSettings(value = {}) {
     showStatus: value.showStatus !== false,
     showChatPanel: value.showChatPanel !== false,
     backgroundOnClose: value.backgroundOnClose !== false,
+    showPeakStatus: value.showPeakStatus !== false,
+    eatDroppedFiles: value.eatDroppedFiles !== false,
+    dynamicActions: value.dynamicActions !== false,
     size: Math.round(clamp(value.size ?? 220, 160, 360) / 10) * 10,
     opacity: clamp(value.opacity ?? 1, 0.55, 1),
     characterId: safeIdentifier(value.characterId) || 'default-maid',
@@ -68,10 +84,38 @@ function normalizeSettings(value = {}) {
   };
 }
 
+function normalizeProgress(value = {}) {
+  return {
+    version: PROGRESS_VERSION,
+    fish: Math.round(clamp(value.fish ?? 0, 0, 99999)),
+    experience: Math.round(clamp(value.experience ?? 0, 0, 999999)),
+    meals: Math.round(clamp(value.meals ?? 0, 0, 999999)),
+    workSessions: Math.round(clamp(value.workSessions ?? 0, 0, 999999)),
+    filesEaten: Math.round(clamp(value.filesEaten ?? 0, 0, 999999)),
+  };
+}
+
+function growthState(experience) {
+  const index = Math.max(0, GROWTH_STAGES.findLastIndex((item) => experience >= item.minimum));
+  const stage = GROWTH_STAGES[index];
+  const next = GROWTH_STAGES[index + 1] || null;
+  return {
+    index,
+    number: index + 1,
+    name: stage.name,
+    title: stage.title,
+    minimum: stage.minimum,
+    nextMinimum: next?.minimum ?? null,
+    nextName: next?.name ?? null,
+    percent: next ? Math.round(((experience - stage.minimum) / (next.minimum - stage.minimum)) * 100) : 100,
+  };
+}
+
 function createDesktopPet({ app, mainWindow, onMenuChange = () => {}, onPluginAction = async () => ({}) }) {
   let petWindow = null;
   let settingsWindow = null;
   let settings = null;
+  let progress = null;
   let status = 'idle';
   let statusText = STATUS_TEXT.idle;
   let statusTimer = null;
@@ -80,14 +124,19 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {}, onPluginAc
   let monitorRunning = false;
   let imageProcessing = false;
   let lastBusy = false;
+  let lastBusyHadCommand = false;
   let lastSubmitAt = 0;
   let chatCollapsed = false;
   let messages = [];
   let messagesSignature = '';
   let destroyed = false;
+  let dragSession = null;
+  let idleBehaviorTimer = null;
+  let lastInteractionAt = Date.now();
   const handlers = [];
 
   const settingsPath = () => path.join(app.getPath('userData'), SETTINGS_FILE);
+  const progressPath = () => path.join(app.getPath('userData'), PROGRESS_FILE);
   const legacyVisionCredentialsPath = () => path.join(app.getPath('userData'), LEGACY_VISION_CREDENTIALS_FILE);
   const userPetDirectory = () => path.join(app.getPath('userData'), 'pets');
   const builtinPetDirectory = () => path.join(app.getAppPath(), 'assets', 'pets', 'default-maid');
@@ -175,6 +224,8 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {}, onPluginAc
       messages,
       characterId: selected?.id || '',
       actions: selected?.actions || {},
+      dynamicActions: loadSettings().dynamicActions,
+      progress: progressPayload(),
     };
   }
 
@@ -183,7 +234,23 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {}, onPluginAc
       settings: { ...loadSettings() },
       vision: localVision.getState(),
       characters: characters(),
+      progress: progressPayload(),
     };
+  }
+
+  function loadProgress() {
+    if (!progress) progress = normalizeProgress(readJson(progressPath()) || {});
+    return progress;
+  }
+
+  function saveProgress() {
+    progress = normalizeProgress(progress);
+    writeJsonAtomic(progressPath(), progress);
+  }
+
+  function progressPayload() {
+    const current = loadProgress();
+    return { ...current, growth: growthState(current.experience) };
   }
 
   function updateSettings(input = {}) {
@@ -206,6 +273,59 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {}, onPluginAc
     status = next;
     statusText = String(detail || STATUS_TEXT[next]).slice(0, 100);
     broadcastState();
+  }
+
+  function touchInteraction() {
+    lastInteractionAt = Date.now();
+    if (status === 'sleeping') setStatus('idle', '醒来陪你工作啦');
+  }
+
+  function addWorkReward(commandCompleted) {
+    const current = loadProgress();
+    const previousStage = growthState(current.experience).index;
+    progress = {
+      ...current,
+      fish: current.fish + (commandCompleted ? 2 : 1),
+      experience: current.experience + (commandCompleted ? 4 : 2),
+      workSessions: current.workSessions + 1,
+    };
+    saveProgress();
+    touchInteraction();
+    const growth = growthState(progress.experience);
+    if (growth.index > previousStage) {
+      setStatus('levelup', `成长到「${growth.name}」啦！`);
+      scheduleIdle(3600);
+    } else broadcastState();
+  }
+
+  function feedPet() {
+    touchInteraction();
+    const current = loadProgress();
+    if (current.fish < 1) {
+      setStatus('error', '小鱼干不够啦，完成一次工作就能获得');
+      scheduleIdle(3200);
+      return { ok: false, reason: 'no-fish', progress: progressPayload() };
+    }
+    const previousStage = growthState(current.experience).index;
+    progress = { ...current, fish: current.fish - 1, experience: current.experience + 10, meals: current.meals + 1 };
+    saveProgress();
+    const growth = growthState(progress.experience);
+    if (growth.index > previousStage) {
+      setStatus('levelup', `小鱼干太香了！成长到「${growth.name}」`);
+      scheduleIdle(3800);
+    } else {
+      setStatus('feeding', `好吃！亲密经验 +10 · 还剩 ${progress.fish} 条`);
+      scheduleIdle(2600);
+    }
+    return { ok: true, progress: progressPayload() };
+  }
+
+  function playWithPet() {
+    touchInteraction();
+    const closeFriend = growthState(loadProgress().experience).index >= 2;
+    setStatus('playing', closeFriend ? '抓到球就陪你继续工作！' : '嘿嘿，再玩一次！');
+    scheduleIdle(2800);
+    return { ok: true, progress: progressPayload() };
   }
 
   function scheduleIdle(delay = 2400) {
@@ -270,6 +390,75 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {}, onPluginAc
     const y = Math.round(clamp(previous.y + previous.height - height, display.y, display.y + display.height - height));
     petWindow.setBounds({ x, y, width, height }, true);
     return { collapsed: chatCollapsed, bounds: petWindow.getBounds() };
+  }
+
+  function beginDrag(point = {}) {
+    if (!petWindow || petWindow.isDestroyed()) return { ok: false };
+    touchInteraction();
+    const bounds = petWindow.getBounds();
+    dragSession = {
+      pointerX: Number(point.screenX) || 0,
+      pointerY: Number(point.screenY) || 0,
+      bounds,
+      previousStatus: status,
+      previousText: statusText,
+    };
+    setStatus('dragging');
+    return { ok: true };
+  }
+
+  function moveDrag(point = {}) {
+    if (!dragSession || !petWindow || petWindow.isDestroyed()) return { ok: false };
+    const display = screen.getDisplayNearestPoint({ x: Math.round(Number(point.screenX) || 0), y: Math.round(Number(point.screenY) || 0) }).workArea;
+    const x = Math.round(clamp(dragSession.bounds.x + (Number(point.screenX) - dragSession.pointerX), display.x, display.x + display.width - dragSession.bounds.width));
+    const y = Math.round(clamp(dragSession.bounds.y + (Number(point.screenY) - dragSession.pointerY), display.y, display.y + display.height - dragSession.bounds.height));
+    petWindow.setPosition(x, y, false);
+    return { ok: true };
+  }
+
+  function endDrag() {
+    if (!dragSession) return { ok: false };
+    dragSession = null;
+    setStatus('idle', '就待在这里陪你吧');
+    scheduleIdle(1700);
+    return { ok: true };
+  }
+
+  async function eatDroppedFiles(filePaths = []) {
+    touchInteraction();
+    if (!loadSettings().eatDroppedFiles) throw new Error('“拖入文件时吃掉”功能当前已关闭。');
+    const candidates = [...new Set((Array.isArray(filePaths) ? filePaths : []).slice(0, 10).map((value) => path.resolve(String(value || ''))))];
+    const files = candidates.filter((filename) => {
+      try { return fs.lstatSync(filename).isFile(); } catch { return false; }
+    });
+    if (!files.length) throw new Error('没有可处理的文件；桌宠不会吃文件夹。');
+    const names = files.map((filename) => path.basename(filename));
+    const confirmation = await dialog.showMessageBox(petWindow, {
+      type: 'warning',
+      title: '让桌宠吃掉文件？',
+      message: `让蓝鲸女仆吃掉 ${files.length} 个文件吗？`,
+      detail: `${names.slice(0, 5).join('\n')}${names.length > 5 ? `\n…另有 ${names.length - 5} 个` : ''}\n\n文件将移动到 Windows 回收站，可从回收站恢复。`,
+      buttons: ['取消', '吃掉并移到回收站'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    });
+    if (confirmation.response !== 1) return { canceled: true, files: [] };
+    setStatus('feeding', files.length === 1 ? `正在吃掉 ${names[0]}…` : `正在吃掉 ${files.length} 个文件…`);
+    const moved = [];
+    for (const filename of files) {
+      try { await shell.trashItem(filename); moved.push(filename); } catch {}
+    }
+    if (!moved.length) {
+      setStatus('error', '文件没有移入回收站');
+      scheduleIdle(3500);
+      throw new Error('无法把所选文件移入 Windows 回收站。');
+    }
+    progress = { ...loadProgress(), filesEaten: loadProgress().filesEaten + moved.length };
+    saveProgress();
+    setStatus('success', `吃饱啦！${moved.length} 个文件已移到回收站`);
+    scheduleIdle(3000);
+    return { ok: true, files: moved.map((filename) => path.basename(filename)), progress: progressPayload() };
   }
 
   function createPetWindow() {
@@ -497,10 +686,21 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {}, onPluginAc
       }
       if (current.busy) {
         clearTimeout(successTimer);
+        lastBusyHadCommand = lastBusyHadCommand || Boolean(current.command);
+        touchInteraction();
         setStatus(current.command ? 'executing' : 'thinking');
       } else if (lastBusy) {
-        setStatus(current.hasError ? 'error' : 'success');
-        scheduleIdle(current.hasError ? 4200 : 2600);
+        if (current.hasError) {
+          setStatus('error');
+          scheduleIdle(4200);
+        } else {
+          addWorkReward(lastBusyHadCommand);
+          if (status !== 'levelup') {
+            setStatus('success', `完成啦，获得 ${lastBusyHadCommand ? 2 : 1} 条小鱼干`);
+            scheduleIdle(2800);
+          }
+        }
+        lastBusyHadCommand = false;
         lastSubmitAt = 0;
       } else if (lastSubmitAt && Date.now() - lastSubmitAt < 4500) {
         setStatus('thinking');
@@ -531,6 +731,12 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {}, onPluginAc
   function installIpc() {
     handle('desktop-pet:get-state', () => publicState());
     handle('desktop-pet:set-collapsed', (value) => setChatCollapsed(value));
+    handle('desktop-pet:feed', () => feedPet());
+    handle('desktop-pet:play', () => playWithPet());
+    handle('desktop-pet:drag-start', (point) => beginDrag(point));
+    handle('desktop-pet:drag-move', (point) => moveDrag(point));
+    handle('desktop-pet:drag-end', () => endDrag());
+    handle('desktop-pet:eat-dropped-files', (filePaths) => eatDroppedFiles(filePaths));
     handle('desktop-pet:send-message', (message) => sendMessage(message));
     handle('desktop-pet:choose-image', (question) => chooseImage(question));
     handle('desktop-pet:open-settings', () => { openSettings(); return { ok: true }; });
@@ -564,18 +770,23 @@ function createDesktopPet({ app, mainWindow, onMenuChange = () => {}, onPluginAc
 
   function start() {
     loadSettings();
+    loadProgress();
     try { fs.rmSync(legacyVisionCredentialsPath(), { force: true }); } catch {}
     fs.mkdirSync(userPetDirectory(), { recursive: true });
     installIpc();
     mainWindow.webContents.on('did-finish-load', installHarnessBridge);
     if (settings.enabled) createPetWindow();
     statusTimer = setInterval(pollHarnessStatus, 700);
+    idleBehaviorTimer = setInterval(() => {
+      if (loadSettings().dynamicActions && status === 'idle' && Date.now() - lastInteractionAt >= 60000) setStatus('sleeping');
+    }, 5000);
     return api;
   }
 
   function destroy() {
     destroyed = true;
     clearInterval(statusTimer);
+    clearInterval(idleBehaviorTimer);
     clearTimeout(successTimer);
     clearTimeout(moveTimer);
     for (const channel of handlers) ipcMain.removeHandler(channel);

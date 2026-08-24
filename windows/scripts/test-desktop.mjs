@@ -82,6 +82,11 @@ try {
   await pluginPanel.getByText('桌宠', { exact: true }).waitFor();
   await pluginPanel.getByText('余额与服务状态', { exact: true }).waitFor();
   await pluginPanel.getByText('DeepSeek Harness 更新', { exact: true }).waitFor();
+  await pluginPanel.getByText('动态拟人动作', { exact: true }).waitFor();
+  await pluginPanel.getByText('拖入文件时吃掉', { exact: true }).waitFor();
+  await pluginPanel.getByText('显示峰谷时段', { exact: true }).waitFor();
+  await pluginPanel.locator('[data-peak]').filter({ hasText: /高峰时段|空闲时段/ }).waitFor({ state: 'visible', timeout: 15000 });
+  await pluginPanel.locator('[data-growth-detail]').filter({ hasText: /下一阶段|最高阶段/ }).waitFor({ timeout: 15000 });
   await pluginPanel.getByRole('button', { name: '重新核对官方版本', exact: true }).waitFor();
   await pluginPanel.getByRole('button', { name: /更新到|已是最新版/ }).waitFor();
   await pluginPanel.getByRole('button', { name: /安装所选版本|当前版本/ }).waitFor();
@@ -127,6 +132,9 @@ try {
   if (extraWindows.length) throw new Error(`Unexpected independent plugin window: ${JSON.stringify(extraWindows.map((window) => window.url()))}`);
   const petPage = application.windows().find((window) => window.url().endsWith('/pet-window.html'));
   if (!petPage) throw new Error('Pet window page was not found.');
+  await petPage.locator('#feedButton').waitFor({ state: 'visible' });
+  await petPage.locator('#playButton').waitFor({ state: 'visible' });
+  await petPage.getByText('Lv.1 初次相遇', { exact: true }).waitFor({ state: 'visible' });
   const expandedPetBounds = await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()
     .find((window) => !window.isDestroyed() && window.getTitle() === 'DeepSeek yu 桌宠')?.getBounds());
   await petPage.locator('#collapseButton').click();
