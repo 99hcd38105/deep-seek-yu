@@ -295,7 +295,7 @@ function cleanProcessError(value) {
     return `插件依赖包含被 pnpm 阻止的构建脚本。\n${text.split('\n').filter((line) => /ERR_PNPM|Ignored build scripts|approve-builds/i.test(line)).slice(-4).join('\n')}`.slice(0, 1500);
   }
   if (/['"]pnpm['"].*(not recognized|不是内部或外部命令)/i.test(text)) {
-    return '客户端缺少 pnpm 插件管理组件。请升级或重新安装 DeepSeek yu 1.1.2。';
+    return '客户端缺少 pnpm 插件管理组件。请升级或重新安装 DeepSeek yu 1.1.3。';
   }
   const lines = text.split('\n').filter(Boolean);
   return lines.slice(-10).join('\n').slice(0, 1500) || '插件安装失败。';

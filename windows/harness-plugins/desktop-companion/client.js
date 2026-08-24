@@ -211,11 +211,11 @@
     if (panel.dataset.ready === 'true') return;
     panel.dataset.ready = 'true';
     panel.innerHTML = `
-      <div class="dsy-head"><div><h3>DeepSeek yu</h3><p>${mobileClient ? '连接电脑端 Harness，设置会同步并在电脑上立即生效。' : 'Harness 内部插件功能，设置直接保存到本机。'}</p></div><span class="dsy-version">v1.1.2 正式版</span></div>
+      <div class="dsy-head"><div><h3>DeepSeek yu</h3><p>${mobileClient ? '连接电脑端 Harness，设置会同步并在电脑上立即生效。' : 'Harness 内部插件功能，设置直接保存到本机。'}</p></div><span class="dsy-version">v1.1.3 测试版</span></div>
       <div class="dsy-grid">
         <section class="dsy-card" data-card="pet"><h4>桌宠</h4><div class="dsy-muted">桌宠在电脑桌面显示 Harness 思考、命令和对话进度。</div><div class="dsy-checks"><label><input type="checkbox" data-pet="enabled"> 启用桌宠</label><label><input type="checkbox" data-pet="alwaysOnTop"> 始终置顶</label><label><input type="checkbox" data-pet="showStatus"> 显示状态</label><label><input type="checkbox" data-pet="showChatPanel"> 显示聊天框</label><label><input type="checkbox" data-pet="backgroundOnClose"> 关闭主窗口后在后台</label></div><div class="dsy-row"><label>大小 <input class="dsy-range" data-pet="size" type="range" min="160" max="360" step="10"> <span data-size-value></span></label><div class="dsy-actions"><button class="dsy-button" data-open-pets>${mobileClient ? '打开电脑桌宠目录' : '添加桌宠'}</button><button class="dsy-button primary" data-save-pet>保存</button></div></div><div class="dsy-state" data-pet-state>正在读取…</div></section>
         <section class="dsy-card" data-card="account"><h4>余额与服务状态</h4><div class="dsy-muted">API Key 只由 Harness 后端读取，不会显示在页面。</div><div data-balance class="dsy-balance">正在读取…</div><div data-account-detail class="dsy-state"></div><button class="dsy-button" data-refresh-account>刷新</button></section>
-        <section class="dsy-card wide" data-card="runtime"><h4>官方 Harness 更新</h4><div class="dsy-muted">只从 DeepSeek 官方 npm 命名空间下载。</div><div class="dsy-row"><div data-runtime-state>正在读取版本…</div><div class="dsy-actions"><select class="dsy-select" data-runtime-versions></select><button class="dsy-button primary" data-install-runtime>安装并切换</button></div></div></section>
+        <section class="dsy-card wide" data-card="runtime"><h4>DeepSeek Harness 更新</h4><div class="dsy-muted">检查并安装 DeepSeek 官方 npm 命名空间中的 Harness 运行时；不会更新社区插件。</div><div class="dsy-row"><div data-runtime-state>正在读取版本…</div><div class="dsy-actions"><button class="dsy-button" data-check-runtime>检查更新</button><select class="dsy-select" data-runtime-versions></select><button class="dsy-button" data-install-runtime>安装所选版本</button><button class="dsy-button primary" data-update-runtime>更新到最新版</button></div></div></section>
       </div>`;
 
     const stateText = (selector, text, error = false) => {
@@ -257,18 +257,46 @@
     };
     panel.querySelector('[data-refresh-account]').addEventListener('click', loadAccount);
 
-    const loadVersions = async () => {
+    let runtimeCatalog = null;
+    const syncRuntimeButtons = () => {
+      const selected = panel.querySelector('[data-runtime-versions]').value;
+      const installButton = panel.querySelector('[data-install-runtime]');
+      const updateButton = panel.querySelector('[data-update-runtime]');
+      installButton.disabled = !runtimeCatalog || selected === runtimeCatalog.active;
+      installButton.textContent = selected === runtimeCatalog?.active ? '当前版本' : '安装所选版本';
+      const upToDate = !runtimeCatalog || runtimeCatalog.active === runtimeCatalog.latest;
+      updateButton.disabled = upToDate || Boolean(runtimeCatalog?.warning);
+      updateButton.textContent = upToDate ? '已是最新版' : `更新到 ${runtimeCatalog.latest}`;
+    };
+    const loadVersions = async (announce = false) => {
       try {
         const value = await request('extensions:versions');
+        runtimeCatalog = value;
         panel.querySelector('[data-runtime-versions]').innerHTML = value.versions.map((version) => `<option${version === value.active ? ' selected' : ''}>${escapeHtml(version)}</option>`).join('');
-        stateText('[data-runtime-state]', `当前 ${value.active}（${value.activeMode === 'bundled' ? '客户端内置' : '已下载官方版'}）· 官方最新 ${value.latest}${value.warning ? ` · ${value.warning}` : ''}`);
+        const upToDate = value.active === value.latest;
+        stateText('[data-runtime-state]', `当前 ${value.active}（${value.activeMode === 'bundled' ? '客户端内置' : '已下载官方版'}）· 官方最新 ${value.latest}${value.warning ? ` · ${value.warning}` : announce ? (upToDate ? ' · 已是最新版' : ' · 发现可用更新') : ''}`, Boolean(value.warning));
+        syncRuntimeButtons();
       } catch (error) { stateText('[data-runtime-state]', error.message, true); }
     };
+    panel.querySelector('[data-runtime-versions]').addEventListener('change', syncRuntimeButtons);
+    panel.querySelector('[data-check-runtime]').addEventListener('click', async (event) => {
+      const button = event.currentTarget; button.disabled = true; button.textContent = '检查中…';
+      try { await loadVersions(true); }
+      finally { button.disabled = false; button.textContent = '检查更新'; }
+    });
     panel.querySelector('[data-install-runtime]').addEventListener('click', async (event) => {
-      const button = event.currentTarget; button.disabled = true; button.textContent = '安装中…';
-      try { const result = await request('extensions:install-runtime', { version: panel.querySelector('[data-runtime-versions]').value }, 600000); if (!result.canceled) stateText('[data-runtime-state]', '安装完成，请重启 DeepSeek yu。'); }
+      const button = event.currentTarget; const original = button.textContent; button.disabled = true; button.textContent = '安装中…';
+      try { const version = panel.querySelector('[data-runtime-versions]').value; const result = await request('extensions:install-runtime', { version }, 600000); if (!result.canceled) stateText('[data-runtime-state]', `DeepSeek Harness ${version} 已安装，重启 DeepSeek yu 后生效。`); }
       catch (error) { stateText('[data-runtime-state]', error.message, true); }
-      finally { button.disabled = false; button.textContent = '安装并切换'; }
+      finally { button.disabled = false; button.textContent = original; syncRuntimeButtons(); }
+    });
+    panel.querySelector('[data-update-runtime]').addEventListener('click', async (event) => {
+      const button = event.currentTarget; const version = runtimeCatalog?.latest;
+      if (!version || version === runtimeCatalog.active) return;
+      button.disabled = true; button.textContent = '更新中…';
+      try { const result = await request('extensions:install-runtime', { version }, 600000); if (!result.canceled) stateText('[data-runtime-state]', `DeepSeek Harness 已更新到 ${version}，重启 DeepSeek yu 后生效。`); }
+      catch (error) { stateText('[data-runtime-state]', error.message, true); }
+      finally { button.disabled = false; syncRuntimeButtons(); }
     });
 
     loadPet(); loadAccount(); loadVersions();
@@ -319,7 +347,7 @@
     if (panel.dataset.ready === 'true') return;
     panel.dataset.ready = 'true';
     panel.innerHTML = `
-      <div class="dsy-head"><div><h3>社区插件</h3><p>发现、验证、安装和卸载当前 web profile 的 Harness 插件。</p></div><span class="dsy-version">v1.1.2 正式版</span></div>
+      <div class="dsy-head"><div><h3>社区插件</h3><p>发现、验证、安装和卸载当前 web profile 的 Harness 插件。</p></div><span class="dsy-version">v1.1.3 测试版</span></div>
       <div class="dsy-grid">
         <section class="dsy-card wide"><div class="dsy-row" style="margin-top:0"><div><h4>已安装插件</h4><div class="dsy-muted">插件可以检查更新、启用、禁用、修复或卸载；挂载状态在重启 DeepSeek yu 后生效。</div></div><div class="dsy-actions"><button class="dsy-button" data-refresh-installed>刷新</button><button class="dsy-button primary" data-check-updates>检查更新</button></div></div><div data-installed-state class="dsy-state">正在读取…</div><div data-installed-list class="dsy-market-list"></div></section>
         <section class="dsy-card wide"><h4>插件市场</h4><div class="dsy-warning">聚合已验证目录、DSH Market 与 GitHub 的 dsh-plugin Topic。安装前会检查仓库根包；如果仓库是插件集合，会尝试按 README 改用真正可挂载的 npm 包。第三方插件可访问文件、命令和网络，请先查看源码。</div><div class="dsy-row"><input class="dsy-input" data-market-search placeholder="搜索插件名、仓库或标签"><div class="dsy-actions"><button class="dsy-button" data-open-topic>打开 GitHub Topic</button><button class="dsy-button primary" data-load-market>加载全部插件</button></div></div><div data-market-state class="dsy-state">点击“加载全部插件”聚合三个插件来源。</div><div data-market-list class="dsy-market-list"></div></section>

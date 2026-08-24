@@ -81,7 +81,10 @@ try {
   const pluginPanel = settings.locator('#deep-seek-yu-plugin-panel');
   await pluginPanel.getByText('桌宠', { exact: true }).waitFor();
   await pluginPanel.getByText('余额与服务状态', { exact: true }).waitFor();
-  await pluginPanel.getByText('官方 Harness 更新', { exact: true }).waitFor();
+  await pluginPanel.getByText('DeepSeek Harness 更新', { exact: true }).waitFor();
+  await pluginPanel.getByRole('button', { name: '检查更新', exact: true }).waitFor();
+  await pluginPanel.getByRole('button', { name: /更新到|已是最新版/ }).waitFor();
+  await pluginPanel.getByRole('button', { name: /安装所选版本|当前版本/ }).waitFor();
   if (await pluginPanel.getByText('插件市场', { exact: true }).count()) throw new Error('社区插件市场不应继续混在 DeepSeek yu 页面中。');
   const mixedNativePage = await pluginPanel.evaluate((element) => [...element.parentElement.children]
     .some((item) => item !== element && !item.classList.contains('dsy-native-hidden')));

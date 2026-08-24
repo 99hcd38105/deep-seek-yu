@@ -117,7 +117,8 @@ jobs:
               '--generate-notes',
               '--title', "DeepSeek yu $tag"
             )
-            if ($tag -match '-') {
+            $channel = (Get-Content -Raw windows/package.json | ConvertFrom-Json).releaseChannel
+            if ($tag -match '-' -or $channel -in @('beta', 'test', 'prerelease')) {
               $arguments += '--prerelease'
             }
             gh release create @arguments
