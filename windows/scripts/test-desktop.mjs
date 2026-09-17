@@ -49,8 +49,12 @@ try {
 
   await mainWindow.getByText('DeepSeek yu', { exact: true }).first().waitFor({ timeout: 30000 });
   if ((await mainWindow.title()).trim() !== 'DeepSeek yu') throw new Error(`Unexpected main window title: ${await mainWindow.title()}`);
-  const topMenuLabels = await application.evaluate(({ Menu }) => Menu.getApplicationMenu().items.map((item) => item.label));
-  if (topMenuLabels.includes('桌宠')) throw new Error('顶部菜单不应再显示桌宠入口。');
+  const topMenuLabels = await application.evaluate(({ Menu }) => Menu.getApplicationMenu()?.items.map((item) => item.label) || []);
+  if (topMenuLabels.length) throw new Error(`主窗口不应显示原生菜单：${JSON.stringify(topMenuLabels)}`);
+  const mainWindowFrame = await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()
+    .find((window) => !window.isDestroyed() && window.webContents.getURL().startsWith('http://127.0.0.1:'))?.isMenuBarVisible());
+  if (mainWindowFrame !== false) throw new Error('主窗口原生菜单栏仍然可见。');
+  await mainWindow.locator('#deep-seek-yu-window-controls').waitFor({ state: 'visible', timeout: 30000 });
   if (await mainWindow.locator('#deep-seek-yu-account-status').count()) throw new Error('Legacy floating account button is still present.');
 
   const onboardingContinue = mainWindow.getByRole('button', { name: '继续', exact: true });
@@ -79,6 +83,9 @@ try {
     throw new Error('DeepSeek yu 不应继续显示为插件页顶部子标签。');
   }
   const pluginPanel = settings.locator('#deep-seek-yu-plugin-panel');
+  await pluginPanel.getByText('客户端与手机连接', { exact: true }).waitFor();
+  await pluginPanel.getByRole('button', { name: '更换 API Key', exact: true }).waitFor();
+  await pluginPanel.getByRole('button', { name: '开启手机连接', exact: true }).waitFor();
   await pluginPanel.getByText('桌宠', { exact: true }).waitFor();
   await pluginPanel.getByText('余额与服务状态', { exact: true }).waitFor();
   await pluginPanel.getByText('DeepSeek Harness 更新', { exact: true }).waitFor();

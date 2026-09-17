@@ -427,6 +427,22 @@ async function dispatchMobileControl(action) {
     case 'desktop-pet:show': desktopPet?.show(); return { ok: true };
     case 'desktop-pet:hide': desktopPet?.hide(); return { ok: true };
     case 'desktop-pet:open-directory': await desktopPet?.openDirectory(); return { ok: true };
+    case 'client:get-state':
+    case 'client:refresh':
+    case 'client:back':
+    case 'client:update-api-key':
+    case 'client:mobile-toggle':
+    case 'client:mobile-copy':
+    case 'client:mobile-reset':
+    case 'client:minimize':
+    case 'client:toggle-maximize':
+    case 'client:close':
+    case 'client:toggle-fullscreen':
+    case 'client:zoom-reset':
+    case 'client:zoom-in':
+    case 'client:zoom-out':
+    case 'client:quit':
+      return dispatchClientControl(action);
     case 'extensions:versions':
     case 'extensions:registry':
     case 'extensions:installed':
@@ -535,116 +551,73 @@ function mobileUrl() {
   return address ? `http://${address}:${settings.port}/?token=${encodeURIComponent(settings.token)}` : '';
 }
 
+async function dispatchClientControl(action) {
+  const type = String(action?.type || '');
+  if (!mainWindow || mainWindow.isDestroyed()) throw new Error('主窗口尚未就绪。');
+  switch (type) {
+    case 'client:get-state':
+      return {
+        canGoBack: mainWindow.webContents.canGoBack(),
+        gatewayStarting,
+        gatewayRunning: gatewayIsRunning(),
+        mobileUrl: gatewayIsRunning() ? mobileUrl() : '',
+        fullscreen: mainWindow.isFullScreen(),
+        maximized: mainWindow.isMaximized(),
+        zoomPercent: Math.round(mainWindow.webContents.getZoomFactor() * 100),
+      };
+    case 'client:refresh': mainWindow.reload(); return { ok: true };
+    case 'client:back':
+      if (mainWindow.webContents.canGoBack()) mainWindow.webContents.goBack();
+      return { ok: true };
+    case 'client:update-api-key': {
+      const saved = await requestDeepSeekApiKey();
+      return { saved: Boolean(saved) };
+    }
+    case 'client:mobile-toggle': {
+      if (gatewayIsRunning()) {
+        await stopGateway();
+        return { running: false, url: '' };
+      }
+      return { running: true, url: await startGateway() };
+    }
+    case 'client:mobile-copy': {
+      const url = mobileUrl();
+      if (!gatewayIsRunning() || !url) throw new Error('请先开启手机连接。');
+      clipboard.writeText(url);
+      return { copied: true, url };
+    }
+    case 'client:mobile-reset': {
+      if (gatewayIsRunning()) await stopGateway();
+      const settings = rotateMobileSettings();
+      return { reset: true, port: settings.port };
+    }
+    case 'client:minimize': mainWindow.minimize(); return { ok: true };
+    case 'client:toggle-maximize':
+      if (mainWindow.isMaximized()) mainWindow.unmaximize(); else mainWindow.maximize();
+      return { maximized: mainWindow.isMaximized() };
+    case 'client:close': mainWindow.close(); return { ok: true };
+    case 'client:toggle-fullscreen':
+      mainWindow.setFullScreen(!mainWindow.isFullScreen());
+      return { fullscreen: mainWindow.isFullScreen() };
+    case 'client:zoom-reset': mainWindow.webContents.setZoomFactor(1); return { zoomPercent: 100 };
+    case 'client:zoom-in': {
+      const factor = Math.min(2, mainWindow.webContents.getZoomFactor() + 0.1);
+      mainWindow.webContents.setZoomFactor(factor);
+      return { zoomPercent: Math.round(factor * 100) };
+    }
+    case 'client:zoom-out': {
+      const factor = Math.max(0.5, mainWindow.webContents.getZoomFactor() - 0.1);
+      mainWindow.webContents.setZoomFactor(factor);
+      return { zoomPercent: Math.round(factor * 100) };
+    }
+    case 'client:quit': app.quit(); return { ok: true };
+    default: throw new Error('未知的客户端操作。');
+  }
+}
+
 function installMenu() {
-  Menu.setApplicationMenu(Menu.buildFromTemplate([
-    {
-      label: '客户端',
-      submenu: [
-        { label: '刷新', accelerator: 'CmdOrCtrl+R', click: () => mainWindow?.reload() },
-        { label: '返回', accelerator: 'Alt+Left', click: () => mainWindow?.webContents.canGoBack() && mainWindow.webContents.goBack() },
-        {
-          label: '更换 DeepSeek API Key',
-          click: async () => {
-            const saved = await requestDeepSeekApiKey();
-            if (!saved) return;
-            await dialog.showMessageBox(mainWindow, {
-              type: 'info',
-              title: 'DeepSeek API Key 已更新',
-              message: '新密钥已安全保存到本机',
-              detail: '源码、安装包和 Android 客户端中都不会包含此密钥。',
-              buttons: ['确定'],
-            });
-          },
-        },
-        { type: 'separator' },
-        { label: '退出', role: 'quit' },
-      ],
-    },
-    {
-      label: '手机连接',
-      submenu: [
-        {
-          label: gatewayStarting ? '正在开启手机连接…' : (gatewayIsRunning() ? '关闭手机连接' : '开启手机连接'),
-          enabled: !gatewayStarting,
-          click: async () => {
-            try {
-              if (gatewayIsRunning()) {
-                await stopGateway();
-                const { port } = mobileSettings();
-                await dialog.showMessageBox(mainWindow, {
-                  type: 'info',
-                  title: '手机连接',
-                  message: '手机连接已关闭',
-                  detail: `端口 ${port} 已停止监听。`,
-                  buttons: ['确定'],
-                });
-              } else {
-                const url = await startGateway();
-                const result = await dialog.showMessageBox(mainWindow, {
-                  type: 'info',
-                  title: '手机连接已开启',
-                  message: url,
-                  detail: '此链接包含本机随机访问密钥，请只发给自己的手机。关闭电脑客户端后，手机连接会自动停止。',
-                  buttons: ['复制连接地址', '关闭'],
-                  defaultId: 0,
-                  cancelId: 1,
-                });
-                if (result.response === 0) clipboard.writeText(url);
-              }
-            } catch (error) {
-              await dialog.showMessageBox(mainWindow, {
-                type: 'error',
-                title: '手机连接失败',
-                message: error.message,
-                buttons: ['确定'],
-              });
-            }
-          },
-        },
-        { type: 'separator' },
-        {
-          label: '显示手机连接地址',
-          enabled: gatewayIsRunning(),
-          click: async () => {
-            const url = mobileUrl();
-            const result = await dialog.showMessageBox(mainWindow, {
-              type: url ? 'info' : 'warning',
-              title: '手机连接',
-              message: url || '没有检测到 Wi-Fi/局域网地址。',
-              detail: url ? '手机与电脑连接同一个 Wi-Fi 后，将完整地址粘贴到 Android 客户端。' : '请先连接可信的家庭或个人 Wi-Fi。',
-              buttons: url ? ['复制连接地址', '关闭'] : ['确定'],
-              defaultId: 0,
-              cancelId: url ? 1 : 0,
-            });
-            if (url && result.response === 0) clipboard.writeText(url);
-          },
-        },
-        {
-          label: '重置手机连接地址',
-          click: async () => {
-            if (gatewayIsRunning()) await stopGateway();
-            const settings = rotateMobileSettings();
-            await dialog.showMessageBox(mainWindow, {
-              type: 'info',
-              title: '手机连接地址已重置',
-              message: '旧连接地址已失效',
-              detail: `已生成新的随机端口 ${settings.port} 和手机连接保护密钥。请重新开启手机连接并复制新地址。`,
-              buttons: ['确定'],
-            });
-          },
-        },
-      ],
-    },
-    {
-      label: '查看',
-      submenu: [
-        { role: 'togglefullscreen', label: '全屏' },
-        { role: 'resetZoom', label: '重置缩放' },
-        { role: 'zoomIn', label: '放大' },
-        { role: 'zoomOut', label: '缩小' },
-      ],
-    },
-  ]));
+  Menu.setApplicationMenu(null);
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setMenu(null);
 }
 
 function showMainWindow() {
@@ -685,7 +658,8 @@ function createWindow() {
     minWidth: 860,
     minHeight: 600,
     backgroundColor: '#071a46',
-    autoHideMenuBar: false,
+    frame: false,
+    autoHideMenuBar: true,
     icon: path.join(app.getAppPath(), 'assets', 'deep-seek-yu-icon.ico'),
     webPreferences: {
       contextIsolation: true,
@@ -760,7 +734,9 @@ if (!gotLock) {
       desktopPet = createDesktopPet({
         app,
         mainWindow,
-        onPluginAction: (action) => extensionsManager.dispatch(action),
+        onPluginAction: (action) => String(action?.type || '').startsWith('client:')
+          ? dispatchClientControl(action)
+          : extensionsManager.dispatch(action),
         onMenuChange: () => {
           if (!quitting) {
             installMenu();

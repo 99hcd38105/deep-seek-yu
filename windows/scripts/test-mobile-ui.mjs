@@ -24,19 +24,18 @@ try {
     throw new Error('Harness main window did not appear.');
   })();
   await main.waitForFunction(() => window.__dshDesktopPetBridgeInstalled === true, null, { timeout: 60000 });
-  await application.evaluate(({ dialog, clipboard, Menu }) => {
-    dialog.showMessageBox = async () => ({ response: 0 });
-    clipboard.clear();
-    const mobile = Menu.getApplicationMenu().items.find((item) => item.label === '手机连接');
-    const open = mobile?.submenu?.items.find((item) => item.label === '开启手机连接');
-    if (!open) throw new Error('手机连接菜单不可用。');
-    open.click();
-  });
+  const onboardingContinue = main.getByRole('button', { name: '继续', exact: true });
+  if (await onboardingContinue.isVisible().catch(() => false)) await onboardingContinue.click();
+  await main.locator('#deep-seek-yu-sidebar-balance').click();
+  await main.locator('#deep-seek-yu-settings-nav').click();
+  const clientPanel = main.locator('#deep-seek-yu-plugin-panel');
+  await clientPanel.locator('[data-mobile-toggle]').click();
   const mobileUrl = await (async () => {
     const deadline = Date.now() + 20000;
     while (Date.now() < deadline) {
-      const value = await application.evaluate(({ clipboard }) => clipboard.readText());
-      if (/^http:\/\/[^/]+:\d+\/\?token=/.test(value)) return value;
+      const value = await clientPanel.locator('[data-client-state]').textContent();
+      const match = /http:\/\/[^/\s]+:\d+\/\?token=[A-Za-z0-9_-]+/.exec(value || '');
+      if (match) return match[0];
       await new Promise((resolve) => setTimeout(resolve, 200));
     }
     throw new Error('手机连接地址未生成。');

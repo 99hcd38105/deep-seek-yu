@@ -123,6 +123,23 @@
     });
     addButton.insertAdjacentElement('afterend', button);
   };
+  const installWindowControls = () => {
+    if (mobileClient || document.getElementById('deep-seek-yu-window-controls')) return;
+    if (!document.getElementById('deep-seek-yu-window-controls-style')) {
+      const style = document.createElement('style');
+      style.id = 'deep-seek-yu-window-controls-style';
+      style.textContent = `#deep-seek-yu-drag-strip{position:fixed;z-index:2147483645;left:0;right:132px;top:0;height:10px;-webkit-app-region:drag}#deep-seek-yu-window-controls{position:fixed;z-index:2147483646;top:8px;right:10px;display:flex;gap:3px;padding:3px;border:1px solid var(--dsw-alias-border-l2,#e2e8f0);border-radius:12px;background:color-mix(in srgb,var(--dsw-alias-bg-layer-1,#fff) 88%,transparent);box-shadow:0 6px 20px #0f172a14;-webkit-app-region:no-drag}#deep-seek-yu-window-controls button{width:30px;height:26px;border:0;border-radius:8px;background:transparent;color:var(--dsw-alias-label-secondary,#475569);font:16px/1 system-ui;cursor:pointer}#deep-seek-yu-window-controls button:hover{background:var(--dsw-alias-interactive-bg-hover,#eef2f7);color:var(--dsw-alias-label-primary,#111827)}#deep-seek-yu-window-controls [data-window-close]:hover{background:#fee2e2;color:#b91c1c}`;
+      document.head.append(style);
+    }
+    const strip = Object.assign(document.createElement('div'), { id: 'deep-seek-yu-drag-strip' });
+    const controls = Object.assign(document.createElement('div'), { id: 'deep-seek-yu-window-controls' });
+    controls.setAttribute('aria-label', '窗口控制');
+    controls.innerHTML = '<button type="button" data-window-minimize title="最小化">−</button><button type="button" data-window-maximize title="最大化或还原">□</button><button type="button" data-window-close title="关闭">×</button>';
+    controls.querySelector('[data-window-minimize]').addEventListener('click', () => request('client:minimize').catch(() => {}));
+    controls.querySelector('[data-window-maximize]').addEventListener('click', () => request('client:toggle-maximize').catch(() => {}));
+    controls.querySelector('[data-window-close]').addEventListener('click', () => request('client:close').catch(() => {}));
+    document.body.append(strip, controls);
+  };
   let sidebarBalanceTimer = 0;
   const refreshSidebarBalance = async () => {
     const button = document.getElementById('deep-seek-yu-sidebar-balance');
@@ -214,9 +231,10 @@
     panel.innerHTML = `
       <div class="dsy-head"><div><h3>DeepSeek yu</h3><p>${mobileClient ? '连接电脑端 Harness，设置会同步并在电脑上立即生效。' : 'Harness 内部插件功能，设置直接保存到本机。'}</p></div><span class="dsy-version">v1.1.3 正式版</span></div>
       <div class="dsy-grid">
+        ${mobileClient ? '' : '<section class="dsy-card wide" data-card="client"><h4>客户端与手机连接</h4><div class="dsy-muted">原窗口顶部菜单已经移除，常用功能集中在这里。</div><div class="dsy-actions" style="margin-top:12px"><button class="dsy-button" data-client-back>返回</button><button class="dsy-button" data-client-refresh>刷新</button><button class="dsy-button" data-client-api-key>更换 API Key</button><button class="dsy-button" data-mobile-toggle>开启手机连接</button><button class="dsy-button" data-mobile-copy>复制连接地址</button><button class="dsy-button" data-mobile-reset>重置连接地址</button><button class="dsy-button" data-client-fullscreen>全屏</button><button class="dsy-button" data-client-zoom-out>缩小</button><button class="dsy-button" data-client-zoom-reset>100%</button><button class="dsy-button" data-client-zoom-in>放大</button></div><div class="dsy-state" data-client-state>正在读取客户端状态…</div></section>'}
         <section class="dsy-card" data-card="pet"><h4>桌宠</h4><div class="dsy-muted">会呼吸、工作、睡觉、玩耍和成长；完成工作获得小鱼干。</div><div class="dsy-checks"><label><input type="checkbox" data-pet="enabled"> 启用桌宠</label><label><input type="checkbox" data-pet="alwaysOnTop"> 始终置顶</label><label><input type="checkbox" data-pet="showStatus"> 显示状态</label><label><input type="checkbox" data-pet="showChatPanel"> 显示聊天框</label><label><input type="checkbox" data-pet="dynamicActions"> 动态拟人动作</label><label><input type="checkbox" data-pet="eatDroppedFiles"> 拖入文件时吃掉</label><label><input type="checkbox" data-pet="backgroundOnClose"> 关闭主窗口后在后台</label></div><div class="dsy-row"><label>大小 <input class="dsy-range" data-pet="size" type="range" min="160" max="360" step="10"> <span data-size-value></span></label><div class="dsy-actions"><button class="dsy-button" data-open-pets>${mobileClient ? '打开电脑桌宠目录' : '添加桌宠'}</button><button class="dsy-button primary" data-save-pet>保存</button></div></div><div class="dsy-state" data-pet-state>正在读取…</div><div class="dsy-progress"><i data-growth-bar style="width:0"></i></div><div class="dsy-muted" data-growth-detail></div></section>
         <section class="dsy-card" data-card="account"><h4>余额与服务状态</h4><div class="dsy-muted">API Key 只由 Harness 后端读取，不会显示在页面。</div><div class="dsy-balance-row"><div data-balance class="dsy-balance">正在读取…</div><span data-peak class="dsy-peak" hidden></span></div><div data-account-detail class="dsy-state"></div><div class="dsy-actions"><button class="dsy-button" data-refresh-account>刷新</button><label><input type="checkbox" data-account-show-peak> 显示峰谷时段</label></div><div class="dsy-muted" data-peak-detail></div></section>
-        <section class="dsy-card wide" data-card="runtime"><h4>DeepSeek Harness 更新</h4><div class="dsy-muted">直接核对 DeepSeek 官方 npm 发布目录。版本按完整编号比较，例如 0.1.1-rc.2 新于 0.1.0-rc.8；这里不更新 DeepSeek yu 或社区插件。</div><div class="dsy-row"><div><div data-runtime-state>正在读取版本…</div><div class="dsy-muted" data-runtime-history></div></div><div class="dsy-actions"><button class="dsy-button" data-check-runtime>重新核对官方版本</button><select class="dsy-select" data-runtime-versions></select><button class="dsy-button" data-install-runtime>安装所选版本</button><button class="dsy-button primary" data-update-runtime>更新到最新版</button></div></div><details data-runtime-history-details style="margin-top:12px"><summary style="cursor:pointer">查看全部历史版本</summary><div class="dsy-state" data-runtime-history-list>正在读取…</div></details></section>
+        <section class="dsy-card wide" data-card="runtime"><h4>DeepSeek Harness 更新</h4><div class="dsy-muted">直接核对 DeepSeek 官方 npm 发布目录，并按所选版本补齐全部同版本官方运行包，兼容 alpha / rc 预发布依赖；这里不更新 DeepSeek yu 或社区插件。</div><div class="dsy-row"><div><div data-runtime-state>正在读取版本…</div><div class="dsy-muted" data-runtime-history></div></div><div class="dsy-actions"><button class="dsy-button" data-check-runtime>重新核对官方版本</button><select class="dsy-select" data-runtime-versions></select><button class="dsy-button" data-install-runtime>安装所选版本</button><button class="dsy-button primary" data-update-runtime>更新到最新版</button></div></div><details data-runtime-history-details style="margin-top:12px"><summary style="cursor:pointer">查看全部历史版本</summary><div class="dsy-state" data-runtime-history-list>正在读取…</div></details></section>
       </div>`;
 
     const stateText = (selector, text, error = false) => {
@@ -224,6 +242,36 @@
       element.textContent = text;
       element.classList.toggle('dsy-error', error);
     };
+    const loadClient = async (message = '') => {
+      if (mobileClient) return;
+      try {
+        const value = await request('client:get-state');
+        panel.querySelector('[data-client-back]').disabled = !value.canGoBack;
+        panel.querySelector('[data-mobile-toggle]').disabled = value.gatewayStarting;
+        panel.querySelector('[data-mobile-toggle]').textContent = value.gatewayStarting ? '正在开启…' : value.gatewayRunning ? '关闭手机连接' : '开启手机连接';
+        panel.querySelector('[data-mobile-copy]').disabled = !value.gatewayRunning || !value.mobileUrl;
+        panel.querySelector('[data-client-fullscreen]').textContent = value.fullscreen ? '退出全屏' : '全屏';
+        panel.querySelector('[data-client-zoom-reset]').textContent = `${value.zoomPercent}%`;
+        stateText('[data-client-state]', message || (value.gatewayRunning ? `手机连接已开启：${value.mobileUrl}` : '手机连接未开启。窗口操作与 API Key 均可在这里管理。'));
+      } catch (error) { stateText('[data-client-state]', error.message, true); }
+    };
+    if (!mobileClient) {
+      const clientAction = (selector, type, success = '') => panel.querySelector(selector).addEventListener('click', async () => {
+        try { await request(type, {}, 120000); await loadClient(success); }
+        catch (error) { stateText('[data-client-state]', error.message, true); }
+      });
+      clientAction('[data-client-back]', 'client:back');
+      clientAction('[data-client-refresh]', 'client:refresh');
+      clientAction('[data-client-api-key]', 'client:update-api-key', 'API Key 操作已完成。');
+      clientAction('[data-mobile-toggle]', 'client:mobile-toggle');
+      clientAction('[data-mobile-copy]', 'client:mobile-copy', '手机连接地址已复制到剪贴板。');
+      clientAction('[data-mobile-reset]', 'client:mobile-reset', '连接地址已重置，请重新开启手机连接。');
+      clientAction('[data-client-fullscreen]', 'client:toggle-fullscreen');
+      clientAction('[data-client-zoom-out]', 'client:zoom-out');
+      clientAction('[data-client-zoom-reset]', 'client:zoom-reset');
+      clientAction('[data-client-zoom-in]', 'client:zoom-in');
+      loadClient();
+    }
     let currentPetSettings = { showPeakStatus: true };
     const loadPet = async () => {
       try {
@@ -567,8 +615,9 @@
     navList.append(navigation, visionNavigation, marketNavigation);
   };
 
-  new MutationObserver(() => { installPetEntry(); installSidebarBalance(); installSettingsPlugin(); }).observe(document.documentElement, { childList: true, subtree: true });
+  new MutationObserver(() => { installPetEntry(); installWindowControls(); installSidebarBalance(); installSettingsPlugin(); }).observe(document.documentElement, { childList: true, subtree: true });
   installPetEntry();
+  installWindowControls();
   installSidebarBalance();
   installSettingsPlugin();
   window.__dshDesktopPetBridgeInstalled = true;

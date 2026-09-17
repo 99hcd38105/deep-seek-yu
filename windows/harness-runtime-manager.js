@@ -6,15 +6,6 @@ const { findNodeExecutable } = require('./node-runtime');
 
 const SETTINGS_FILE = 'official-harness-runtime.json';
 const REGISTRY_URL = 'https://registry.npmjs.org/@deepseek-ai%2fdsh';
-const OFFICIAL_RUNTIME_PEERS = [
-  '@deepseek-ai/dsh-anonymous-user-id', '@deepseek-ai/dsh-atomic-write', '@deepseek-ai/dsh-bash-local',
-  '@deepseek-ai/dsh-code-runtime', '@deepseek-ai/dsh-compaction', '@deepseek-ai/dsh-fs',
-  '@deepseek-ai/dsh-invariants', '@deepseek-ai/dsh-output-retention', '@deepseek-ai/dsh-sandbox',
-  '@deepseek-ai/dsh-scope', '@deepseek-ai/dsh-session-telemetry', '@deepseek-ai/dsh-session-title-llm',
-  '@deepseek-ai/dsh-shell', '@deepseek-ai/dsh-spill', '@deepseek-ai/dsh-subagent-in-process-driver',
-  '@deepseek-ai/dsh-subprocess', '@deepseek-ai/dsh-timeout', '@deepseek-ai/dsh-workflow',
-];
-
 function atomicJson(filename, value) {
   const temporary = `${filename}.tmp`;
   fs.mkdirSync(path.dirname(filename), { recursive: true, mode: 0o700 });
@@ -56,6 +47,32 @@ function proxyUrl(rule) {
   const match = /(?:PROXY|HTTPS?)\s+([^;\s]+)/i.exec(String(rule || ''));
   if (!match) return '';
   return /^https?:\/\//i.test(match[1]) ? match[1] : `http://${match[1]}`;
+}
+
+async function officialDependencySet(version, dispatcher) {
+  const discovered = new Map();
+  const pending = new Map();
+  const visit = (packageName) => {
+    if (pending.has(packageName)) return pending.get(packageName);
+    const task = (async () => {
+      const encodedName = encodeURIComponent(packageName).replace('%40', '@');
+      const response = await fetch(`https://registry.npmjs.org/${encodedName}/${encodeURIComponent(version)}`, {
+        headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(60000),
+        ...(dispatcher ? { dispatcher } : {}),
+      });
+      if (!response.ok) throw new Error(`${packageName}@${version} 尚未完整发布（HTTP ${response.status}）。`);
+      const metadata = await response.json();
+      discovered.set(packageName, version);
+      const dependencies = Object.keys(metadata.dependencies || {})
+        .filter((name) => name.startsWith('@deepseek-ai/dsh-'));
+      await Promise.all(dependencies.map(visit));
+    })();
+    pending.set(packageName, task);
+    return task;
+  };
+  await visit('@deepseek-ai/dsh');
+  discovered.delete('@deepseek-ai/dsh');
+  return Object.fromEntries([...discovered].sort(([left], [right]) => left.localeCompare(right)));
 }
 
 function createHarnessRuntimeManager({ app, resolveProxy = async () => '' }) {
@@ -143,7 +160,9 @@ function createHarnessRuntimeManager({ app, resolveProxy = async () => '' }) {
     const target = runtimeDirectory(version);
     fs.mkdirSync(target, { recursive: true, mode: 0o700 });
     const fileSpec = (relative) => `file:${path.join(appRoot(), relative).replaceAll('\\', '/')}`;
-    const officialDependencies = Object.fromEntries(OFFICIAL_RUNTIME_PEERS.map((name) => [name, version]));
+    const proxy = proxyUrl(await resolveProxy(REGISTRY_URL));
+    const officialDependencies = await officialDependencySet(version, proxy ? new ProxyAgent(proxy) : null);
+    onLine(`已核对 ${Object.keys(officialDependencies).length + 1} 个 DeepSeek 官方运行包`);
     atomicJson(path.join(target, 'package.json'), {
       name: 'deep-seek-yu-official-harness-runtime',
       private: true,
@@ -155,15 +174,17 @@ function createHarnessRuntimeManager({ app, resolveProxy = async () => '' }) {
         '@deep-seek-yu/desktop-companion': fileSpec('harness-plugins/desktop-companion'),
         '@deep-seek-yu/account-status': fileSpec('harness-plugins/account-status'),
       },
-      pnpm: { onlyBuiltDependencies: ['@huggingface/transformers', 'sharp'] },
     });
+    fs.writeFileSync(path.join(target, 'pnpm-workspace.yaml'),
+      "packages:\n  - .\nonlyBuiltDependencies:\n  - '@huggingface/transformers'\n  - sharp\n", { mode: 0o600 });
     const pnpm = path.join(appRoot(), 'node_modules', 'pnpm', 'bin', 'pnpm.cjs');
     if (!fs.existsSync(pnpm)) throw new Error('安装包缺少内置 pnpm，请重新安装客户端。');
     const node = findNodeExecutable(app);
     if (!node) throw new Error('安装包缺少 Harness 私有 Node.js 运行时，请重新安装客户端。');
     const environment = { ...process.env };
     onLine(`正在从 DeepSeek 官方 npm 安装 @deepseek-ai/dsh@${version}`);
-    await run(node, ['--expose-internals', pnpm, '--dir', target, 'install', '--prod', '--config.node-linker=hoisted'], { env: environment }, onLine);
+    await run(node, ['--expose-internals', pnpm, '--dir', target, 'install', '--prod', '--config.node-linker=hoisted',
+      '--config.fetch-timeout=300000', '--config.fetch-retries=3', '--config.network-concurrency=8'], { env: environment }, onLine);
     const patcher = path.join(appRoot(), 'scripts', 'apply-harness-core-patches.mjs');
     await run(node, ['--expose-internals', patcher, target], { env: environment }, onLine);
     if (!installedEntry(version)) throw new Error('官方 Harness 已下载，但没有找到启动入口。');
