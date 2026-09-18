@@ -1,10 +1,11 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = process.argv[2]
   ? path.resolve(process.argv[2])
   : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const bestEffort = process.argv.includes('--best-effort');
 const HOST_MARKER = 'deepseek-harness-local-vision-host-v1';
 const ADAPTER_MARKER = 'deepseek-harness-local-vision-adapter-v1';
 const TYPES_MARKER = 'deepseek-harness-local-vision-types-v1';
@@ -24,20 +25,44 @@ function replaceOnce(source, before, after, target) {
   return `${source.slice(0, first)}${after}${source.slice(first + before.length)}`;
 }
 
-function patchFile(relative, marker, transform) {
+function patchFile(relative, marker, transform, { optional = false } = {}) {
   const filename = path.join(root, relative);
+  if (!existsSync(filename)) {
+    if (optional || bestEffort) {
+      console.warn(`Skipping Harness core patch; file is not present: ${relative}`);
+      return;
+    }
+    throw new Error(`Harness core patch file missing: ${relative}`);
+  }
   const source = readFileSync(filename, 'utf8');
   if (source.includes(marker)) return;
-  const patched = transform(source);
-  writeFileSync(filename, `${patched}\n/* ${marker} */\n`, 'utf8');
+  try {
+    const patched = transform(source);
+    writeFileSync(filename, `${patched}\n/* ${marker} */\n`, 'utf8');
+  } catch (error) {
+    if (!bestEffort) throw error;
+    console.warn(`Skipping incompatible Harness core patch for ${relative}: ${error.message}`);
+  }
 }
 
 function replaceTextFile(relative, before, after, target) {
   const filename = path.join(root, relative);
+  if (!existsSync(filename)) {
+    if (bestEffort) {
+      console.warn(`Skipping Harness text patch; file is not present: ${relative}`);
+      return;
+    }
+    throw new Error(`Harness text patch file missing: ${relative}`);
+  }
   const source = readFileSync(filename, 'utf8');
   if (source.includes(after)) return;
-  const patched = replaceOnce(source, before, after, target);
-  writeFileSync(filename, patched, 'utf8');
+  try {
+    const patched = replaceOnce(source, before, after, target);
+    writeFileSync(filename, patched, 'utf8');
+  } catch (error) {
+    if (!bestEffort) throw error;
+    console.warn(`Skipping incompatible Harness text patch for ${relative}: ${error.message}`);
+  }
 }
 
 patchFile(
@@ -122,6 +147,7 @@ patchFile(
     );
     return source;
   },
+  { optional: true },
 );
 
 patchFile(
@@ -150,6 +176,13 @@ patchFile(
   'node_modules/@deepseek-ai/dsh-client-ui-renderer/lib/client.js',
   BRAND_DOCUMENT_MARKER,
   source => replaceOnce(source, 'const productTitle = "DeepSeek Harness";', 'const productTitle = "DeepSeek yu";', 'Harness live document title'),
+);
+
+patchFile(
+  'node_modules/@deepseek-ai/dsh-client-ui-layout/lib/client.js',
+  BRAND_DOCUMENT_MARKER,
+  source => replaceOnce(source, 'const productTitle = "DeepSeek Harness";', 'const productTitle = "DeepSeek yu";', 'Harness live document title'),
+  { optional: true },
 );
 
 patchFile(

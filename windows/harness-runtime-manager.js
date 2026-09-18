@@ -78,7 +78,8 @@ async function officialDependencySet(version, dispatcher) {
 function createHarnessRuntimeManager({ app, resolveProxy = async () => '' }) {
   const appRoot = () => app.getAppPath();
   const settingsPath = () => path.join(app.getPath('userData'), SETTINGS_FILE);
-  const runtimeRoot = () => path.join(app.getPath('userData'), 'official-harness-runtimes');
+  const runtimeRoot = () => process.env.DSH_TEST_RUNTIME_ROOT
+    || path.join(app.getPath('userData'), 'official-harness-runtimes');
   const bundledPackage = () => JSON.parse(fs.readFileSync(path.join(appRoot(), 'node_modules', '@deepseek-ai', 'dsh', 'package.json'), 'utf8'));
   const bundledVersion = () => bundledPackage().version;
   const readSettings = () => {
@@ -131,7 +132,8 @@ function createHarnessRuntimeManager({ app, resolveProxy = async () => '' }) {
       return {
         ...local,
         latest,
-        versions: [...new Set([local.active, local.bundled, ...available])].slice(0, 30),
+        versions: [...new Set([local.active, local.bundled, ...taggedVersions, ...available])].slice(0, 30),
+        allVersions: available,
         publishedVersions: publishedVersions.slice(0, 30),
         distTags: registry['dist-tags'] || {},
         checkedAt: new Date().toISOString(),
@@ -142,6 +144,7 @@ function createHarnessRuntimeManager({ app, resolveProxy = async () => '' }) {
         ...local,
         latest: local.bundled,
         versions: [...new Set([local.active, local.bundled])],
+        allVersions: [local.active, local.bundled],
         publishedVersions: [],
         distTags: {},
         checkedAt: new Date().toISOString(),
@@ -152,7 +155,9 @@ function createHarnessRuntimeManager({ app, resolveProxy = async () => '' }) {
   }
   async function install(version, onLine = () => {}) {
     const catalog = await versions();
-    if (!catalog.versions.includes(version)) throw new Error('该版本不在 DeepSeek 官方 npm 版本目录中。');
+    if (!catalog.allVersions.includes(version) && !catalog.versions.includes(version)) {
+      throw new Error('该版本不在 DeepSeek 官方 npm 版本目录中。');
+    }
     if (version === bundledVersion()) {
       atomicJson(settingsPath(), { mode: 'bundled', version });
       return { version, mode: 'bundled', restartRequired: true };
@@ -176,20 +181,31 @@ function createHarnessRuntimeManager({ app, resolveProxy = async () => '' }) {
       },
     });
     fs.writeFileSync(path.join(target, 'pnpm-workspace.yaml'),
-      "packages:\n  - .\nonlyBuiltDependencies:\n  - '@huggingface/transformers'\n  - sharp\n", { mode: 0o600 });
+      "packages:\n  - .\nminimumReleaseAge: 0\nonlyBuiltDependencies:\n  - '@deepseek-ai/dsh-subprocess-local'\n  - '@google/genai'\n  - '@huggingface/transformers'\n  - koffi\n  - node-pty\n  - onnxruntime-node\n  - protobufjs\n  - sharp\n", { mode: 0o600 });
     const pnpm = path.join(appRoot(), 'node_modules', 'pnpm', 'bin', 'pnpm.cjs');
     if (!fs.existsSync(pnpm)) throw new Error('安装包缺少内置 pnpm，请重新安装客户端。');
     const node = findNodeExecutable(app);
     if (!node) throw new Error('安装包缺少 Harness 私有 Node.js 运行时，请重新安装客户端。');
     const environment = { ...process.env };
     onLine(`正在从 DeepSeek 官方 npm 安装 @deepseek-ai/dsh@${version}`);
-    await run(node, ['--expose-internals', pnpm, '--dir', target, 'install', '--prod', '--config.node-linker=hoisted',
-      '--config.fetch-timeout=300000', '--config.fetch-retries=3', '--config.network-concurrency=8'], { env: environment }, onLine);
+    let installWarning = '';
+    try {
+      await run(node, ['--expose-internals', pnpm, '--dir', target, 'install', '--prod', '--config.node-linker=hoisted',
+        '--fetch-timeout=300000', '--fetch-retries=3', '--network-concurrency=8', '--no-optional'], { env: environment }, onLine);
+    } catch (error) {
+      if (!installedEntry(version)) throw error;
+      const message = String(error?.message || error);
+      const recoverableOptionalDependencyError = /ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY/.test(message)
+        && /(?:darwin|linux|arm64|ia32)/i.test(message);
+      if (!recoverableOptionalDependencyError) throw error;
+      installWarning = message.slice(-1200);
+      onLine('官方 Harness 启动文件已完整下载；忽略 pnpm 对非 Windows 可选依赖的收尾错误。');
+    }
     const patcher = path.join(appRoot(), 'scripts', 'apply-harness-core-patches.mjs');
-    await run(node, ['--expose-internals', patcher, target], { env: environment }, onLine);
+    await run(node, ['--expose-internals', patcher, target, '--best-effort'], { env: environment }, onLine);
     if (!installedEntry(version)) throw new Error('官方 Harness 已下载，但没有找到启动入口。');
     atomicJson(settingsPath(), { mode: 'installed', version });
-    return { version, mode: 'installed', restartRequired: true };
+    return { version, mode: 'installed', restartRequired: true, ...(installWarning ? { warning: installWarning } : {}) };
   }
   return { active, versions, install, pluginEntry, bundledVersion };
 }

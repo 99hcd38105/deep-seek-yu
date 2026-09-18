@@ -76,6 +76,7 @@
       "pet-preload.js",
       "pet-window.html",
       "extensions-manager.js",
+      "deepseek-model-catalog.js",
     "harness-runtime-manager.js",
     "node-runtime.js",
     "runtime/node.exe",

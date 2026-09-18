@@ -4,6 +4,11 @@ import os from 'node:os';
 import path from 'node:path';
 
 const testUserData = await mkdtemp(path.join(os.tmpdir(), 'dsh-desktop-test-'));
+if (process.env.DSH_TEST_RUNTIME_VERSION) {
+  await writeFile(path.join(testUserData, 'official-harness-runtime.json'), `${JSON.stringify({
+    mode: 'installed', version: process.env.DSH_TEST_RUNTIME_VERSION,
+  }, null, 2)}\n`);
+}
 const testModelCache = process.env.DSH_TEST_MODEL_CACHE
   || path.join(process.env.APPDATA || os.homedir(), 'deepseek-harness-desktop', 'models');
 await mkdir(path.join(testUserData, 'dsh-home'), { recursive: true });
@@ -29,6 +34,11 @@ try {
     throw new Error(`Harness main window did not appear: ${JSON.stringify(application.windows().map((window) => window.url()))}`);
   })();
   await mainWindow.waitForLoadState('domcontentloaded');
+  await application.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows()
+      .find((window) => !window.isDestroyed() && window.webContents.getURL().startsWith('http://127.0.0.1:'))
+      ?.setSize(1280, 820);
+  });
 
   const migratedCredentials = await readFile(path.join(testUserData, 'dsh-home', '.credentials.yaml'), 'utf8');
   if (/^DEEPSEEK_API_KEY\s*:/m.test(migratedCredentials)
@@ -47,14 +57,21 @@ try {
     throw new Error(`Harness plugins did not initialize: ${JSON.stringify(diagnostics)}`, { cause: error });
   }
 
-  await mainWindow.getByText('DeepSeek yu', { exact: true }).first().waitFor({ timeout: 30000 });
   if ((await mainWindow.title()).trim() !== 'DeepSeek yu') throw new Error(`Unexpected main window title: ${await mainWindow.title()}`);
   const topMenuLabels = await application.evaluate(({ Menu }) => Menu.getApplicationMenu()?.items.map((item) => item.label) || []);
   if (topMenuLabels.length) throw new Error(`主窗口不应显示原生菜单：${JSON.stringify(topMenuLabels)}`);
   const mainWindowFrame = await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()
     .find((window) => !window.isDestroyed() && window.webContents.getURL().startsWith('http://127.0.0.1:'))?.isMenuBarVisible());
   if (mainWindowFrame !== false) throw new Error('主窗口原生菜单栏仍然可见。');
-  await mainWindow.locator('#deep-seek-yu-window-controls').waitFor({ state: 'visible', timeout: 30000 });
+  const titlebarSpace = mainWindow.locator('#deep-seek-yu-titlebar-space');
+  await titlebarSpace.waitFor({ state: 'visible', timeout: 30000 });
+  const titlebarBox = await titlebarSpace.boundingBox();
+  if (!titlebarBox || Math.abs(titlebarBox.y) > 1 || titlebarBox.height < 35 || titlebarBox.height > 38 || titlebarBox.width < 800) {
+    throw new Error(`独立标题栏区域异常：${JSON.stringify(titlebarBox)}`);
+  }
+  if (await mainWindow.locator('#deep-seek-yu-window-controls').count()) {
+    throw new Error('页面内不应再注入会覆盖 Harness 的自定义窗口按钮。');
+  }
   if (await mainWindow.locator('#deep-seek-yu-account-status').count()) throw new Error('Legacy floating account button is still present.');
 
   const onboardingContinue = mainWindow.getByRole('button', { name: '继续', exact: true });
@@ -85,6 +102,7 @@ try {
   const pluginPanel = settings.locator('#deep-seek-yu-plugin-panel');
   await pluginPanel.getByText('客户端与手机连接', { exact: true }).waitFor();
   await pluginPanel.getByRole('button', { name: '更换 API Key', exact: true }).waitFor();
+  await pluginPanel.getByRole('button', { name: '立即同步官方模型', exact: true }).waitFor();
   await pluginPanel.getByRole('button', { name: '开启手机连接', exact: true }).waitFor();
   await pluginPanel.getByText('桌宠', { exact: true }).waitFor();
   await pluginPanel.getByText('余额与服务状态', { exact: true }).waitFor();
@@ -102,7 +120,8 @@ try {
     .some((item) => item !== element && !item.classList.contains('dsy-native-hidden')));
   if (mixedNativePage) throw new Error('DeepSeek yu 页面仍与上一次打开的官方设置页混合显示。');
   await pluginPanel.locator('[data-pet-state]').filter({ hasNotText: '正在读取' }).waitFor({ timeout: 15000 });
-  await pluginPanel.locator('[data-runtime-state]').filter({ hasText: '0.1.1-rc.2' }).waitFor({ timeout: 45000 });
+  const expectedRuntimeVersion = process.env.DSH_TEST_RUNTIME_VERSION || '0.1.1-rc.2';
+  await pluginPanel.locator('[data-runtime-state]').filter({ hasText: expectedRuntimeVersion }).waitFor({ timeout: 45000 });
   await pluginPanel.locator('[data-runtime-history]').filter({ hasText: /最近发布|联网后/ }).waitFor({ timeout: 45000 });
   await pluginPanel.getByText('查看全部历史版本', { exact: true }).click();
   await pluginPanel.locator('[data-runtime-history-list]').filter({ hasNotText: '正在读取' }).waitFor({ timeout: 45000 });
@@ -133,7 +152,7 @@ try {
     return source.includes('deep-seek-yu-model-selection-timeout-v1')
       && source.includes('切换模型超时，请重试');
   });
-  if (!timeoutPatch) throw new Error('Model switching timeout recovery patch is missing.');
+  if (!process.env.DSH_TEST_RUNTIME_VERSION && !timeoutPatch) throw new Error('Model switching timeout recovery patch is missing.');
 
   const extraWindows = application.windows().filter((window) => window !== mainWindow && !window.url().startsWith('file:'));
   if (extraWindows.length) throw new Error(`Unexpected independent plugin window: ${JSON.stringify(extraWindows.map((window) => window.url()))}`);

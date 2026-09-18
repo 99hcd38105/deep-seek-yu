@@ -11,6 +11,7 @@ const YAML = require('yaml');
 const { createDesktopPet } = require('./pet-manager');
 const { createHarnessRuntimeManager } = require('./harness-runtime-manager');
 const { createExtensionsManager } = require('./extensions-manager');
+const { createDeepSeekModelCatalog } = require('./deepseek-model-catalog');
 const { findNodeExecutable } = require('./node-runtime');
 
 const MOBILE_SETTINGS_FILE = 'mobile-access.json';
@@ -22,6 +23,8 @@ let mainWindow;
 let desktopPet = null;
 let extensionsManager = null;
 let runtimeManager = null;
+let modelCatalog = null;
+let modelCatalogTimer = null;
 let gatewayProcess = null;
 let harnessProcess = null;
 let gatewayStarting = false;
@@ -29,6 +32,7 @@ let initializing = true;
 let mobileSettingsCache = null;
 let quitting = false;
 let tray = null;
+let harnessWebUrl = null;
 
 if (process.env.DSH_TEST_USER_DATA) {
   app.setPath('userData', path.resolve(process.env.DSH_TEST_USER_DATA));
@@ -183,6 +187,10 @@ function rotateMobileSettings() {
 
 function localUrl() {
   return `http://127.0.0.1:${mobileSettings().harnessPort}/`;
+}
+
+function activeWebUrl() {
+  return harnessWebUrl || localUrl();
 }
 
 function requestDeepSeekApiKey() {
@@ -370,7 +378,10 @@ async function ensureHarness() {
     harnessProcess = child;
     let startupOutput = '';
     const receiveStartupOutput = (chunk) => {
-      startupOutput = `${startupOutput}${chunk.toString()}`.slice(-16000);
+      const text = chunk.toString();
+      startupOutput = `${startupOutput}${text}`.slice(-16000);
+      const announcedUrl = /dsh web:\s+(https?:\/\/\S+)/.exec(text)?.[1];
+      if (announcedUrl) harnessWebUrl = announcedUrl;
     };
     child.stdout.on('data', receiveStartupOutput);
     child.stderr.on('data', receiveStartupOutput);
@@ -385,7 +396,15 @@ async function ensureHarness() {
           settled = true;
           callback(value);
         };
-        waitForHttp(localUrl()).then(() => complete(resolve)).catch((error) => complete(reject, error));
+        waitForHttp(localUrl()).then(() => {
+          const authenticationDeadline = Date.now() + 10000;
+          const awaitAuthenticationUrl = () => {
+            if (harnessWebUrl || runtimeManager?.active().mode !== 'installed' || Date.now() >= authenticationDeadline) {
+              complete(resolve);
+            } else setTimeout(awaitAuthenticationUrl, 50);
+          };
+          awaitAuthenticationUrl();
+        }).catch((error) => complete(reject, error));
         child.once('error', (error) => complete(reject, error));
         child.once('exit', (code) => {
           const safeDetail = startupOutput
@@ -431,6 +450,7 @@ async function dispatchMobileControl(action) {
     case 'client:refresh':
     case 'client:back':
     case 'client:update-api-key':
+    case 'client:models-refresh':
     case 'client:mobile-toggle':
     case 'client:mobile-copy':
     case 'client:mobile-reset':
@@ -571,8 +591,10 @@ async function dispatchClientControl(action) {
       return { ok: true };
     case 'client:update-api-key': {
       const saved = await requestDeepSeekApiKey();
+      if (saved) await modelCatalog?.sync();
       return { saved: Boolean(saved) };
     }
+    case 'client:models-refresh': return modelCatalog.sync();
     case 'client:mobile-toggle': {
       if (gatewayIsRunning()) {
         await stopGateway();
@@ -650,7 +672,7 @@ function createTray() {
 }
 
 function createWindow() {
-  const appUrl = localUrl();
+  const appUrl = activeWebUrl();
   mainWindow = new BrowserWindow({
     title: 'DeepSeek yu',
     width: 1280,
@@ -658,7 +680,12 @@ function createWindow() {
     minWidth: 860,
     minHeight: 600,
     backgroundColor: '#071a46',
-    frame: false,
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: '#ffffff',
+      symbolColor: '#475569',
+      height: 36,
+    },
     autoHideMenuBar: true,
     icon: path.join(app.getAppPath(), 'assets', 'deep-seek-yu-icon.ico'),
     webPreferences: {
@@ -722,6 +749,11 @@ if (!gotLock) {
         app,
         resolveProxy: (url) => session.defaultSession.resolveProxy(url),
       });
+      modelCatalog = createDeepSeekModelCatalog({
+        dshHome,
+        resolveProxy: (url) => session.defaultSession.resolveProxy(url),
+      });
+      if (!process.env.DSH_TEST_USER_DATA) await modelCatalog.sync().catch(() => {});
       await ensureHarness();
       createWindow();
       extensionsManager = createExtensionsManager({
@@ -746,6 +778,10 @@ if (!gotLock) {
       }).start();
       createTray();
       installMenu();
+      if (!process.env.DSH_TEST_USER_DATA) {
+        modelCatalogTimer = setInterval(() => modelCatalog.sync().catch(() => {}), 15 * 60 * 1000);
+        modelCatalogTimer.unref?.();
+      }
       initializing = false;
     } catch (error) {
       await dialog.showMessageBox({
@@ -768,6 +804,8 @@ app.on('before-quit', () => {
   desktopPet = null;
   extensionsManager?.destroy();
   extensionsManager = null;
+  if (modelCatalogTimer) clearInterval(modelCatalogTimer);
+  modelCatalogTimer = null;
   if (tray && !tray.isDestroyed()) tray.destroy();
   tray = null;
   stopGatewayNow();

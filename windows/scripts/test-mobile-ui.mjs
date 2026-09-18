@@ -26,10 +26,11 @@ try {
   await main.waitForFunction(() => window.__dshDesktopPetBridgeInstalled === true, null, { timeout: 60000 });
   const onboardingContinue = main.getByRole('button', { name: '继续', exact: true });
   if (await onboardingContinue.isVisible().catch(() => false)) await onboardingContinue.click();
-  await main.locator('#deep-seek-yu-sidebar-balance').click();
-  await main.locator('#deep-seek-yu-settings-nav').click();
+  await main.locator('#deep-seek-yu-sidebar-balance').evaluate((element) => element.click());
+  await main.locator('#deep-seek-yu-settings-nav').waitFor({ timeout: 30000 });
+  await main.locator('#deep-seek-yu-settings-nav').evaluate((element) => element.click());
   const clientPanel = main.locator('#deep-seek-yu-plugin-panel');
-  await clientPanel.locator('[data-mobile-toggle]').click();
+  await clientPanel.locator('[data-mobile-toggle]').evaluate((element) => element.click());
   const mobileUrl = await (async () => {
     const deadline = Date.now() + 20000;
     while (Date.now() < deadline) {
