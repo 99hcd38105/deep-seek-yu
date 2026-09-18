@@ -12,6 +12,7 @@ const { createDesktopPet } = require('./pet-manager');
 const { createHarnessRuntimeManager } = require('./harness-runtime-manager');
 const { createExtensionsManager } = require('./extensions-manager');
 const { createDeepSeekModelCatalog } = require('./deepseek-model-catalog');
+const { disableIncompatibleProfileBundles } = require('./runtime-profile-compatibility');
 const { findNodeExecutable } = require('./node-runtime');
 
 const MOBILE_SETTINGS_FILE = 'mobile-access.json';
@@ -749,6 +750,15 @@ if (!gotLock) {
         app,
         resolveProxy: (url) => session.defaultSession.resolveProxy(url),
       });
+      try {
+        const activeRuntime = runtimeManager.active();
+        const compatibility = disableIncompatibleProfileBundles({ dshHome: dshHome(), runtime: activeRuntime });
+        if (compatibility.disabled.length) {
+          console.warn(`已停用 ${compatibility.disabled.length} 个与 Harness ${activeRuntime.version} 不兼容的社区插件包。`);
+        }
+      } catch (error) {
+        console.warn('检查社区插件与新版 Harness 的兼容性失败，将继续尝试启动。', error);
+      }
       modelCatalog = createDeepSeekModelCatalog({
         dshHome,
         resolveProxy: (url) => session.defaultSession.resolveProxy(url),

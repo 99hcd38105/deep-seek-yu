@@ -14,6 +14,23 @@ const testModelCache = process.env.DSH_TEST_MODEL_CACHE
 await mkdir(path.join(testUserData, 'dsh-home'), { recursive: true });
 await writeFile(path.join(testUserData, 'dsh-home', '.credentials.yaml'),
   'version: 1\nrefs:\n  DEEPSEEK_API_KEY: "older-test-key"\nDEEPSEEK_API_KEY: "test-key-not-used"\n');
+if (process.env.DSH_TEST_RUNTIME_VERSION) {
+  const profile = path.join(testUserData, 'dsh-home', 'profiles', 'web');
+  const bundle = path.join(profile, 'node_modules', '@test', 'legacy-bundle');
+  const plugin = path.join(profile, 'node_modules', '@test', 'legacy-settings-plugin');
+  await mkdir(path.join(plugin, 'lib'), { recursive: true });
+  await mkdir(bundle, { recursive: true });
+  await writeFile(path.join(profile, 'package.json'), `${JSON.stringify({
+    name: 'dsh-profile-web', private: true,
+    dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@test/legacy-bundle'] } },
+  }, null, 2)}\n`);
+  await writeFile(path.join(bundle, 'package.json'), `${JSON.stringify({
+    name: '@test/legacy-bundle', dsh: { bundle: { patch: './cordis.patch.yml' } },
+  }, null, 2)}\n`);
+  await writeFile(path.join(bundle, 'cordis.patch.yml'), "- insert:\n  - id: legacy-settings\n    name: '@test/legacy-settings-plugin'\n");
+  await writeFile(path.join(plugin, 'lib', 'index.js'),
+    'import { settingsNamespace } from "@deepseek-ai/dsh-settings";\n');
+}
 
 const launchOptions = {
   env: { ...process.env, DSH_TEST_USER_DATA: testUserData, DSH_TEST_MODEL_CACHE: testModelCache },
@@ -44,6 +61,16 @@ try {
   if (/^DEEPSEEK_API_KEY\s*:/m.test(migratedCredentials)
     || !/^\s{2}DEEPSEEK_API_KEY\s*:/m.test(migratedCredentials)) {
     throw new Error('Legacy DeepSeek credential layout was not migrated.');
+  }
+  if (process.env.DSH_TEST_RUNTIME_VERSION) {
+    const profile = JSON.parse(await readFile(path.join(testUserData, 'dsh-home', 'profiles', 'web', 'package.json'), 'utf8'));
+    const report = JSON.parse(await readFile(path.join(testUserData, 'dsh-home', 'disabled-incompatible-plugins.json'), 'utf8'));
+    if (profile.dsh.profile.bundles.includes('@test/legacy-bundle')
+      || !profile.dsh.profile.bundles.includes('@deepseek-ai/dsh-base')
+      || report.disabled[0]?.name !== '@test/legacy-bundle') {
+      throw new Error(`Legacy profile bundle was not safely disabled: ${JSON.stringify({ profile, report })}`);
+    }
+    await readFile(path.join(testUserData, 'dsh-home', 'profiles', 'web', 'node_modules', '@test', 'legacy-settings-plugin', 'lib', 'index.js'));
   }
 
   try {
